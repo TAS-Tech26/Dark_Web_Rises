@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title> Client</title>
+    </head>
+    <body>
+        <div id="login_screen">
+            <p>Enter name:</p>
+            <input type="text" id="username_input" placeholder="Enter username: ">
+            <button id="login_button">Login</button>
+        </div>
+
+        <div id="team_init_screen" style="display: none;">
+            <button id="team_create">Create team</button>
+            <button id="team_select">Select team</button>
+        </div>
+
+        <div id="create_team_screen" style="display: none;">
+            <p>Enter team name:</p>
+            <input type="text" id="create_team_name_input" placeholder="Enter team name: ">
+            <button id="create_team_button">Create team</button>
+        </div>
+
+        <div id="select_team_screem" style="display: none;">
+            <p>Enter team name that you want to join:</p>
+            <input type="text" id="select_team_name_input" placeholder="Enter team name: ">
+            <button id="select_team_button">Join team</button>
+        </div>
+
+        <div id="game_screen" style="display: none;">
+            <div id="chat_box"style="height: 200px; border: 1px solid black; overflow-y: scroll;"></div>
+            <input type="text" id="message_input" placeholder="Type a message...">
+            <button id="send_button">Send to Server</button>
+        </div>
+
+        <script src="js_client.js"></script>
+        
+    </body>
+</html>
