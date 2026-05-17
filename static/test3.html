@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <h2 id="status">Connecting...</h2>
+  <img id="game-img" src="" style="display:none; max-width:500px;" />
+  <br/>
+  <input id="prompt" placeholder="Describe the image..." disabled style="width:300px;" />
+  <button id="send-btn" onclick="sendPrompt()" disabled>Send</button>
+  <pre id="log"></pre>
+
+  <script>
+    // Change this for each tab: player1_id or player2_id
+    //const PLAYER_ID = prompt("Enter your player ID:");
+    //const ROOM_ID = prompt("Enter room ID (room1 or room2):");
+    const params = new URLSearchParams(window.location.search);
+    const ROOM_ID = params.get("room") || prompt("Enter room ID:");
+    const PLAYER_ID = params.get("player") || prompt("Enter player ID:");
+
+    const ws = new WebSocket(`ws://localhost:8000/ws/${ROOM_ID}/${PLAYER_ID}`);
+
+    ws.onopen = () => {
+      document.getElementById("status").innerText = "Connected! Waiting for game...";
+    };
+
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      console.log(data);
+
+      if (data.type === "your_turn") {
+        document.getElementById("status").innerText = data.message;
+        document.getElementById("game-img").src = data.image;
+        document.getElementById("game-img").style.display = "block";
+        document.getElementById("prompt").disabled = false;
+        document.getElementById("send-btn").disabled = false;
+
+      } else if (data.type === "text") {
+        document.getElementById("status").innerText = data.message;
+        document.getElementById("prompt").disabled = true;
+        document.getElementById("send-btn").disabled = true;
+
+      } else if (data.type === "game_over") {
+        document.getElementById("status").innerText = `Game Over! Final Score: ${data.score}`;
+        document.getElementById("prompt").disabled = true;
+        document.getElementById("send-btn").disabled = true;
+      }
+    };
+
+    ws.onclose = () => {
+      document.getElementById("status").innerText = "Disconnected";
+    };
+
+    function sendPrompt() {
+      const prompt = document.getElementById("prompt").value;
+      if (prompt.trim() === "") return;
+      ws.send(prompt);
+      document.getElementById("prompt").value = "";
+      document.getElementById("prompt").disabled = true;
+      document.getElementById("send-btn").disabled = true;
+      document.getElementById("log").innerText += `You sent: ${prompt}\n`;
+    }
+  </script>
+</body>
+</html>
