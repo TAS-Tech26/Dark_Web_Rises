@@ -3,7 +3,6 @@ from enum import StrEnum, IntEnum
 class JSONFields(StrEnum):
     TYPE = "type"
     STATUS = "status"
-    ID = "ID"
     USERNAME = "username"
     PASSWORD = "password"
     AUTHORISED = "authorised"
@@ -15,6 +14,7 @@ class Login(StrEnum):
     LOGIN = "login"
     DENIED = "denied"
     ACCEPTED = "accepted"
+    LOGOUT = "logout"
 
 class NameStatus(IntEnum):
     AVAILABLE = 0
@@ -23,3 +23,4 @@ class NameStatus(IntEnum):
 
 class Responses(StrEnum):
     LOGIN_RESPONSE = "login_response"
+    LOGOUT_RESPONSE = "logout_response"

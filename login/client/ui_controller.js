@@ -15,6 +15,7 @@ const passwordInput = document.getElementById("password_input");
 const loginButton = document.getElementById("login_button");
 
 // Team Init Screen
+const logoutButton = document.getElementById("logout_button");
 const teamInitScreen = document.getElementById("team_init_screen");
 const teamCreateBtn = document.getElementById("team_create");
 const teamSelectBtn = document.getElementById("team_select");
@@ -57,6 +58,23 @@ game.on_login_failed = function(status) {
     passwordInput.value = ""; // Clear the password for safety
 };
 
+game.on_logout_success = function() {
+    console.log("Successfully logged out.");
+    
+    // 1. Hide the game screen, show the login screen
+    gameScreen.style.display = "none";
+    loginScreen.style.display = "block";
+    
+    // 2. Clean up the UI so it's fresh for the next login
+    chatBox.innerHTML = ""; 
+    passwordInput.value = ""; // Clear the password field for security
+    usernameInput.style.borderColor = "#3d3d3d"; // Reset border color
+};
+
+game.on_logout_failed = function(status) {
+    alert("Failed to log out cleanly. Status: " + status);
+};
+
 // ==========================================
 // 4. UI Event Listeners
 // ==========================================
@@ -76,6 +94,11 @@ loginButton.addEventListener("click", function() {
 
     // Call your clean network API
     game.login(username, password);
+});
+
+logoutButton.addEventListener("click", function() {
+    // Call your clean network API
+    game.logout();
 });
 
 // --- TEAM ROUTING ---
