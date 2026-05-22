@@ -63,8 +63,7 @@ class GameClient
         this.on_team_ready = null;
         this.on_team_unready = null;
 
-        this.on_player_joined = null;
-        this.on_player_left = null;
+        this.on_roster_update = null;
 
         //router
         this.socket.onmessage = (event) => { 
@@ -106,13 +105,9 @@ class GameClient
                 {
                     if (this.on_team_unready) this.on_team_unready();
                 }
-                else if (data[JSONFields.TEAM_STATE] === TeamState.JOINED)
+                else if (data[JSONFields.TEAM_STATE] === TeamState.JOINED || data[JSONFields.TEAM_STATE] === TeamState.LEFT)
                 {
-                    if (this.on_player_joined) this.on_player_joined(data[JSONFields.USERNAME]);
-                }
-                else if (data[JSONFields.TEAM_STATE] === TeamState.LEFT) 
-                {
-                    if (this.on_player_left) this.on_player_left(data[JSONFields.USERNAME]);
+                    if (this.on_roster_update) this.on_roster_update(data[JSONFields.USERNAME]);
                 }
             }
         };

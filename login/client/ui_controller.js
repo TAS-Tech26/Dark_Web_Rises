@@ -8,6 +8,7 @@ const lobbyScreen = document.getElementById("lobby_screen");
 const usernameInput = document.getElementById("username_input");
 const passwordInput = document.getElementById("password_input");
 const lobbyLog = document.getElementById("lobby_log");
+const rosterList = document.getElementById("roster_list");
 
 // Helper to write to the lobby screen
 function addLog(text, className = "log-msg") {
@@ -19,6 +20,19 @@ function addLog(text, className = "log-msg") {
 }
 
 // --- NETWORK HOOKS ---
+
+game.on_roster_update = (rosterArray) => {
+    
+    // 1. Wipe the current HTML list clean
+    rosterList.innerHTML = "";
+    
+    // 2. Loop through the JSON array and create a new bullet point for each player
+    rosterArray.forEach(username => {
+        const li = document.createElement("li");
+        li.textContent = username;
+        rosterList.appendChild(li);
+    });
+};
 
 game.on_login_success = (userId) => {
     loginScreen.style.display = "none";
@@ -37,15 +51,6 @@ game.on_logout_success = () => {
 };
 
 // --- TEAM STATE HOOKS ---
-
-game.on_player_joined = (username) => {
-    addLog(`[+] ${username} joined the team.`);
-};
-
-game.on_player_left = (username) => {
-    addLog(`[-] ${username} left the team.`);
-};
-
 game.on_team_ready = () => {
     addLog(`⭐ TEAM IS FULL AND READY! ⭐`, "log-ready");
 };

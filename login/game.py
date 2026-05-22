@@ -47,7 +47,7 @@ async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_gam
 
                     await game.teams[current_team_id].announce_to_team({JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE,
                                                                   JSONFields.TEAM_STATE: TeamState.JOINED,
-                                                                  JSONFields.USERNAME: data.get(JSONFields.USERNAME)})
+                                                                  JSONFields.USERNAME: [game.users[uid].username for uid in game.connected_teams[current_team_id]]})
 
                     if response.get(JSONFields.CONNECTED_TEAM_MEMBERS) == 4:
                         await game.teams[current_team_id].announce_to_team({JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE, 
@@ -65,7 +65,7 @@ async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_gam
 
                     await game.teams[current_team_id].announce_to_team({JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE,
                                                                   JSONFields.TEAM_STATE: TeamState.LEFT,
-                                                                  JSONFields.USERNAME: game.users[current_user_id].username})
+                                                                  JSONFields.USERNAME: [game.users[uid].username for uid in game.connected_teams[current_team_id]]})
 
                     if team_unready:
                         await game.teams[current_team_id].announce_to_team({JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE, 
@@ -91,12 +91,12 @@ async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_gam
 
             await game.teams[current_team_id].announce_to_team({JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE,
                                                           JSONFields.TEAM_STATE: TeamState.LEFT,
-                                                          JSONFields.USERNAME: game.users[current_user_id].username})
+                                                          JSONFields.USERNAME: [game.users[uid].username for uid in game.connected_teams[current_team_id]]})
 
             if len(game.connected_teams[current_team_id]) == 3:
                 await game.teams[current_team_id].announce_to_team({JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE, 
                                                               JSONFields.TEAM_STATE: TeamState.NOT_READY})
-                game.teams[current_user_id].team_state = TeamState.NOT_READY
+                game.teams[current_team_id].team_state = TeamState.NOT_READY
 
             current_user_id = None
             current_team_id = None
