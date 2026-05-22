@@ -7,7 +7,10 @@ const JSONFields = Object.freeze({
     AUTHORISED : "authorised",
     TEAM_NAME : "team_name",
     USER_ID : "user_id",
-    TEAM_ID : "team_id"
+    TEAM_ID : "team_id",
+    CONNECTED_TEAM_MEMBERS : "connected_team_members",
+    GAME_STATE : "game_state",
+    TEAM_STATE : "team_state"
 });
 
 const Login = Object.freeze({
@@ -19,7 +22,9 @@ const Login = Object.freeze({
 
 const Responses = Object.freeze({
     LOGIN_RESPONSE : "login_response",
-    LOGOUT_RESPONSE : "logout_response"
+    LOGOUT_RESPONSE : "logout_response",
+    GAME_STATE_RESPONSE : "game_state_response",
+    TEAM_STATE_RESPONSE : "team_state_response"
 });
 
 const NameStatus = Object.freeze({
@@ -28,6 +33,18 @@ const NameStatus = Object.freeze({
     DNE : -1
 });
 
+const GameState = Object.freeze({
+    LOGIN_PERIOD : 0,
+    PREGAME : 1,
+    GAME_RUNNING : 2
+});
+
+const TeamState = Object.freeze({
+    NOT_READY : 0,
+    READY : 1,
+    JOINED : 2,
+    LEFT : 3
+});
 
 class GameClient
 {
@@ -42,6 +59,12 @@ class GameClient
 
         this.on_logout_success = null;
         this.on_logout_failed = null;
+
+        this.on_team_ready = null;
+        this.on_team_unready = null;
+
+        this.on_player_joined = null;
+        this.on_player_left = null;
 
         //router
         this.socket.onmessage = (event) => { 
@@ -70,6 +93,26 @@ class GameClient
                 else if (data[JSONFields.AUTHORISED] === Login.DENIED)
                 {
                     if (this.on_logout_failed) this.on_logout_failed(data[JSONFields.STATUS]);
+                }
+            }
+
+            else if (data[JSONFields.TYPE] === Responses.TEAM_STATE_RESPONSE)
+            {
+                if (data[JSONFields.TEAM_STATE] === TeamState.READY)
+                {
+                    if (this.on_team_ready) this.on_team_ready();
+                }
+                else if (data[JSONFields.TEAM_STATE] === TeamState.NOT_READY)
+                {
+                    if (this.on_team_unready) this.on_team_unready();
+                }
+                else if (data[JSONFields.TEAM_STATE] === TeamState.JOINED)
+                {
+                    if (this.on_player_joined) this.on_player_joined(data[JSONFields.USERNAME]);
+                }
+                else if (data[JSONFields.TEAM_STATE] === TeamState.LEFT) 
+                {
+                    if (this.on_player_left) this.on_player_left(data[JSONFields.USERNAME]);
                 }
             }
         };
