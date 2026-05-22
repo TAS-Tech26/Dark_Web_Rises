@@ -44,7 +44,7 @@ class GameClient
         this.on_logout_failed = null;
 
         //router
-        this.socket.onmessage = (event) => {
+        this.socket.onmessage = (event) => { 
             const data = JSON.parse(event.data);
 
             if (data[JSONFields.TYPE] === Responses.LOGIN_RESPONSE)

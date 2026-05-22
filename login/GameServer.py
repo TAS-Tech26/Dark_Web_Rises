@@ -13,7 +13,14 @@ class Team:
         self.max_members = max_members
         self.id = id
         self.members = []
+        self.connected_sockets = {}
         self.team_name = "insert team name here"
+
+
+    async def announce_to_team(self, message):
+        for uid, socket in self.connected_sockets.items():
+            await socket.send_json(message)
+
 
 class GameServer:
     def __init__(self, server_id, max_teams, max_members_per_team, team_names, user_data): #team names later
@@ -22,6 +29,7 @@ class GameServer:
 
         self.connected_users = set()
         self.connected_teams = [[] for _ in range(max_teams)]
+        self.connected_sockets = {}
 
         self.teams = []
 
@@ -41,7 +49,7 @@ class GameServer:
             new_user.team_id = team_id
             self.users.append(new_user)
 
-    def check_login(self, data):
+    def check_login(self, data, socket):
         response = {
                 JSONFields.TYPE: Responses.LOGIN_RESPONSE,
                 JSONFields.STATUS: NameStatus.DNE,
@@ -57,12 +65,20 @@ class GameServer:
                 response[JSONFields.STATUS] = NameStatus.AVAILABLE
 
                 if user.password == pwd:
-                    response[JSONFields.AUTHORISED] = Login.ACCEPTED
-                    response[JSONFields.USER_ID] = user.id
+                    uid = user.id
+                    tid = user.team_id
 
-                    self.connected_users.add(user.id)
-                    if user.id not in self.connected_teams[user.team_id]:
-                        self.connected_teams[user.team_id].append(user.id)
+                    response[JSONFields.AUTHORISED] = Login.ACCEPTED
+                    response[JSONFields.USER_ID] = uid
+
+                    self.connected_users.add(uid)
+                    self.connected_sockets.add(uid)
+
+                    self.connected_sockets[uid] = socket
+                    self.teams[tid].connected_sockets[uid] = socket 
+
+                    if user.id not in self.connected_teams[tid]:
+                        self.connected_teams[tid].append(uid)
 
                 break
 
@@ -78,14 +94,22 @@ class GameServer:
         if user_id in self.connected_users:
             response[JSONFields.AUTHORISED] = Login.ACCEPTED
             response[JSONFields.STATUS] = NameStatus.AVAILABLE
+
             self.save_user_data(user_id)
             self.connected_users.remove(user_id)
+
+            self.connected_sockets.pop(user_id)
 
             team_id = self.users[user_id].team_id
             if user_id in self.connected_teams[team_id]:
                 self.connected_teams[team_id].remove(user_id)
+                self.teams[team_id].connected_sockets.pop(user_id)
 
         return response
+    
+    async def announce_to_users(self, message):
+        for uid, socket in self.connected_sockets:
+            await socket.send_json(message)
     
     def save_user_data(self, user_id):
         #to be done later

@@ -4,6 +4,7 @@ from enumerations import JSONFields, Login, NameStatus
 import json
 
 server = GameServer(server_id=0,
+                    socket = None,
                     max_teams=3,
                     max_members_per_team=4,
                     team_names=["name1", "name2", "name3"],
@@ -20,6 +21,8 @@ app = FastAPI()
 
 @app.websocket("/ws")
 async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_game_server)):
+    game.socket = websocket
+
     await websocket.accept()
     current_user_id = None
     current_team_id = None
@@ -35,7 +38,7 @@ async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_gam
 
             #login check
             if data.get(JSONFields.TYPE) == Login.LOGIN:
-                response = game.check_login(data)
+                response = game.check_login(data, websocket)
 
                 if response.get(JSONFields.AUTHORISED) == Login.ACCEPTED:
                     current_user_id = response.get(JSONFields.USER_ID)
