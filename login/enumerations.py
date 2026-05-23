@@ -12,6 +12,12 @@ class JSONFields(StrEnum):
     CONNECTED_TEAM_MEMBERS = "connected_team_members"
     GAME_STATE = "game_state"
     TEAM_STATE = "team_state"
+    IMAGE = "image"
+    MESSAGE = "message"
+    PROMPT = "prompt"
+    TIME = "time"
+    IS_PLAYER_TURN = "is_player_turn"
+    PROMPT_STATUS = "prompt_status"
 
 class Login(StrEnum):
     LOGIN = "login"
@@ -29,15 +35,26 @@ class Responses(StrEnum):
     LOGOUT_RESPONSE = "logout_response"
     GAME_STATE_RESPONSE = "game_state_response"
     TEAM_STATE_RESPONSE = "team_state_response"
+    GAMEPLAY_RESPONSE = "gameplay_response"
     
 
 class GameState(IntEnum):
     LOGIN_PERIOD = 0
     PREGAME = 1
     GAME_RUNNING = 2
+    COUNTDOWN = 3
 
 class TeamState(IntEnum):
-    NOT_READY = 0
-    READY = 1
+    WAITING = 0
     JOINED = 2
     LEFT = 3
+    PLAYING = 4
+    DONE = 5
+
+class GamePlay(IntEnum):
+    NOT_PROMPTED = 0
+    PROMPTED = 1
+    RECEIVED = 2
+    NOT_RECEIVED = 3
+    IMAGE_IN = 4
+    PROMPT_OUT = 5

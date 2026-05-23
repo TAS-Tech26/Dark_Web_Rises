@@ -1,7 +1,9 @@
 from fastapi import FastAPI, WebSocket, Depends, WebSocketDisconnect
 from GameServer import GameServer, User, Team
-from enumerations import JSONFields, Login, NameStatus, Responses, GameState, TeamState
+from enumerations import JSONFields, Login, NameStatus, Responses, GameState, TeamState, GamePlay
 import json
+import asyncio
+import time
 
 server = GameServer(server_id=0,
                     max_teams=3,
@@ -48,18 +50,14 @@ async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_gam
                     await game.teams[current_team_id].announce_to_team({JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE,
                                                                   JSONFields.TEAM_STATE: TeamState.JOINED,
                                                                   JSONFields.USERNAME: [game.users[uid].username for uid in game.connected_teams[current_team_id]]})
-
-                    if response.get(JSONFields.CONNECTED_TEAM_MEMBERS) == 4:
-                        await game.teams[current_team_id].announce_to_team({JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE, 
-                                                                      JSONFields.TEAM_STATE: TeamState.READY})
-                        game.teams[current_team_id].team_state = TeamState.READY
+                    
                 else:
                     await websocket.send_json(response)
 
             elif current_user_id != None:
                 #logout check
                 if data.get(JSONFields.TYPE) == Login.LOGOUT:
-                    response, team_unready = game.check_logout(user_id=current_user_id)
+                    response = game.check_logout(user_id=current_user_id)
 
                     await websocket.send_json(response)
 
@@ -67,13 +65,13 @@ async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_gam
                                                                   JSONFields.TEAM_STATE: TeamState.LEFT,
                                                                   JSONFields.USERNAME: [game.users[uid].username for uid in game.connected_teams[current_team_id]]})
 
-                    if team_unready:
-                        await game.teams[current_team_id].announce_to_team({JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE, 
-                                                                      JSONFields.TEAM_STATE: TeamState.NOT_READY})
-                        game.teams[current_user_id].team_state = TeamState.NOT_READY
-
                     current_user_id = None
                     current_team_id = None
+
+                if game.game_state == GameState.GAME_RUNNING or game.game_state == GameState.COUNTDOWN:
+                    if data.get(JSONFields.TYPE) == GamePlay.PROMPT_OUT:
+                        if current_user_id == game.teams[current_team_id].current_turn_uid:
+                            await game.teams[current_team_id].input_queue.put(data)
 
             else:
                 await websocket.send_json({JSONFields.TYPE: None})
@@ -81,7 +79,6 @@ async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_gam
     except WebSocketDisconnect:
         if current_user_id is not None:
             if current_user_id in game.connected_users:
-                game.save_user_data(current_user_id)
                 game.connected_users.remove(current_user_id)
                 game.connected_sockets.pop(current_user_id)
 
@@ -93,13 +90,34 @@ async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_gam
                                                           JSONFields.TEAM_STATE: TeamState.LEFT,
                                                           JSONFields.USERNAME: [game.users[uid].username for uid in game.connected_teams[current_team_id]]})
 
-            if len(game.connected_teams[current_team_id]) == 3:
-                await game.teams[current_team_id].announce_to_team({JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE, 
-                                                              JSONFields.TEAM_STATE: TeamState.NOT_READY})
-                game.teams[current_team_id].team_state = TeamState.NOT_READY
-
             current_user_id = None
             current_team_id = None
 
             
         print("client disconnected")
+
+@app.post("/admin/rungame")
+async def force_start_game(game: GameServer = Depends(get_game_server)):
+    game.game_state = GameState.COUNTDOWN 
+
+    game.countdown_end_time = time.time() + 5
+
+    await game.announce_to_users({
+        JSONFields.TYPE: Responses.GAME_STATE_RESPONSE,
+        JSONFields.MESSAGE: GameState.COUNTDOWN,
+        JSONFields.TIME: 5 
+    })
+
+    await asyncio.sleep(5)
+
+    game.game_state = GameState.GAME_RUNNING
+
+    await game.announce_to_users({
+        JSONFields.TYPE: Responses.GAME_STATE_RESPONSE,
+        JSONFields.MESSAGE: GameState.GAME_RUNNING
+    })
+
+    await game.start_games(time_per_round=30, timeout=30, penalty=5)
+
+    return {"message": "game running"}
+
