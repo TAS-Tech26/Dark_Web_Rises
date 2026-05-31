@@ -16,7 +16,10 @@ const JSONFields = Object.freeze({
     PROMPT : "prompt",
     TIME : "time",
     IS_PLAYER_TURN : "is_player_turn",
-    PROMPT_STATUS : "prompt_status"
+    PROMPT_STATUS : "prompt_status",
+    TEAM_SCORE : "team_score",
+    TEAM_RANK : "team_rank",
+    TOP3 : "top3"
 });
 
 const Login = Object.freeze({
@@ -44,7 +47,8 @@ const GameState = Object.freeze({
     LOGIN_PERIOD : 0,
     PREGAME : 1,
     GAME_RUNNING : 2,
-    COUNTDOWN : 3
+    COUNTDOWN : 3,
+    GAME_OVER : 4
 });
 
 const TeamState = Object.freeze({
@@ -90,7 +94,11 @@ class GameClient
         this.on_prompt_success = null;
         this.on_prompt_fail = null;
 
+        this.on_team_done = null;
+
         this.on_game_countdown = null;
+
+        this.on_game_over = null;
 
         //router
         this.socket.onmessage = (event) => { 
@@ -114,11 +122,36 @@ class GameClient
                             if (this.on_game_countdown) this.on_game_countdown(data[JSONFields.TIME]);
                         }
                     }
-                    else if (data[JSONFields.TEAM_STATE] == TeamState.PLAYING)
+                    else if (data[JSONFields.TEAM_STATE] === TeamState.PLAYING)
                     {
                         this.user_id = data[JSONFields.USER_ID];
                         if (this.on_login_success) this.on_login_success(this.user_id);
-                        if (this.run_turn) this.run_turn(data[JSONFields.IMAGE], data[JSONFields.TIME]);
+                        if (data[JSONFields.IS_PLAYER_TURN] === true)
+                        {
+                            if (this.run_turn) this.run_turn(data[JSONFields.IMAGE], data[JSONFields.TIME]);
+                        }
+                        else 
+                        {
+                            if (this.on_game_start) this.on_game_start();
+
+                            document.getElementById("game_image").src = data[JSONFields.IMAGE]; 
+                            document.getElementById("game_image").style.display = "block";
+                        }
+                    }
+                    else if (data[JSONFields.TEAM_STATE] === TeamState.DONE)
+                    {
+                        if (data[JSONFields.GAME_STATE] === GameState.GAME_RUNNING)
+                        {
+                            this.user_id = data[JSONFields.USER_ID];
+                            if (this.on_login_success) this.on_login_success(this.user_id);
+                            if (this.on_team_done) this.on_team_done();
+                        }
+                        else if (data[JSONFields.GAME_STATE] === GameState.GAME_OVER)
+                        {
+                            this.user_id = data[JSONFields.USER_ID];
+                            if (this.on_login_success) this.on_login_success(this.user_id);
+                            if (this.on_game_over) this.on_game_over(data[JSONFields.TEAM_SCORE], data[JSONFields.TEAM_RANK], data[JSONFields.TOP3]);
+                        }
                     }
                 }
                 else if (data[JSONFields.AUTHORISED] === Login.DENIED)
@@ -142,14 +175,18 @@ class GameClient
 
             else if (data[JSONFields.TYPE] === Responses.GAME_STATE_RESPONSE)
             {
-                if (data[JSONFields.MESSAGE] === GameState.COUNTDOWN)
+                if (data[JSONFields.GAME_STATE] === GameState.COUNTDOWN)
                 {
                     
                     if (this.on_game_countdown) this.on_game_countdown(data[JSONFields.TIME]);
                 }
-                else if (data[JSONFields.MESSAGE] === GameState.GAME_RUNNING)
+                else if (data[JSONFields.GAME_STATE] === GameState.GAME_RUNNING)
                 {
                     if (this.on_game_start) this.on_game_start();
+                }
+                else if (data[JSONFields.GAME_STATE] === GameState.GAME_OVER)
+                {
+                    if (this.on_game_over) this.on_game_over(data[JSONFields.TEAM_SCORE], data[JSONFields.TEAM_RANK], data[JSONFields.TOP3]);
                 }
             }
 
@@ -158,6 +195,10 @@ class GameClient
                 if (data[JSONFields.TEAM_STATE] === TeamState.JOINED || data[JSONFields.TEAM_STATE] === TeamState.LEFT) 
                 {
                     if (this.on_roster_update) this.on_roster_update(data[JSONFields.USERNAME]);
+                }
+                else if (data[JSONFields.TEAM_STATE] === TeamState.DONE)
+                {
+                    if (this.on_team_done) this.on_team_done();
                 }
             }
 
@@ -204,4 +245,4 @@ class GameClient
     
 }
 
-export { GameClient, Login, JSONFields, Responses, NameStatus };
+export { GameClient, Login, JSONFields, Responses, NameStatus, GamePlay };

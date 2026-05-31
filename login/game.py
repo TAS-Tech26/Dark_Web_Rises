@@ -1,6 +1,7 @@
 from fastapi import FastAPI, WebSocket, Depends, WebSocketDisconnect
 from GameServer import GameServer, User, Team
 from enumerations import JSONFields, Login, NameStatus, Responses, GameState, TeamState, GamePlay
+from fastapi.staticfiles import StaticFiles
 import json
 import asyncio
 import time
@@ -21,6 +22,7 @@ def get_game_server():
     return server
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.websocket("/ws")
 async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_game_server)):
@@ -68,11 +70,10 @@ async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_gam
                     current_user_id = None
                     current_team_id = None
 
-                if game.game_state == GameState.GAME_RUNNING or game.game_state == GameState.COUNTDOWN:
+                elif game.game_state == GameState.GAME_RUNNING or game.game_state == GameState.COUNTDOWN:
                     if data.get(JSONFields.TYPE) == GamePlay.PROMPT_OUT:
                         if current_user_id == game.teams[current_team_id].current_turn_uid:
                             await game.teams[current_team_id].input_queue.put(data)
-
             else:
                 await websocket.send_json({JSONFields.TYPE: None})
             
@@ -104,7 +105,7 @@ async def force_start_game(game: GameServer = Depends(get_game_server)):
 
     await game.announce_to_users({
         JSONFields.TYPE: Responses.GAME_STATE_RESPONSE,
-        JSONFields.MESSAGE: GameState.COUNTDOWN,
+        JSONFields.GAME_STATE: GameState.COUNTDOWN,
         JSONFields.TIME: 5 
     })
 
@@ -114,7 +115,7 @@ async def force_start_game(game: GameServer = Depends(get_game_server)):
 
     await game.announce_to_users({
         JSONFields.TYPE: Responses.GAME_STATE_RESPONSE,
-        JSONFields.MESSAGE: GameState.GAME_RUNNING
+        JSONFields.GAME_STATE: GameState.GAME_RUNNING
     })
 
     await game.start_games(time_per_round=30, timeout=30, penalty=5)

@@ -18,6 +18,9 @@ class JSONFields(StrEnum):
     TIME = "time"
     IS_PLAYER_TURN = "is_player_turn"
     PROMPT_STATUS = "prompt_status"
+    TEAM_SCORE = "team_score"
+    TEAM_RANK = "team_rank"
+    TOP3 = "top3"
 
 class Login(StrEnum):
     LOGIN = "login"
@@ -43,6 +46,7 @@ class GameState(IntEnum):
     PREGAME = 1
     GAME_RUNNING = 2
     COUNTDOWN = 3
+    GAME_OVER = 4
 
 class TeamState(IntEnum):
     WAITING = 0

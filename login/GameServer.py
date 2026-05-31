@@ -3,18 +3,35 @@ from fastapi import FastAPI, WebSocket, Depends, WebSocketDisconnect
 import time
 import json
 import asyncio
+import random
+import os
 
 async def get_image(prompt):
-    #to be done later
-    pass
+    folder_path = os.path.join("static", "images")
+    try:
+        all_files = os.listdir(folder_path)
+    except FileNotFoundError:
+        print("folder path doesnt exist")
+        return "/static/default.png"
+    
+    valid_extensions = (".png", ".jpeg", ".jpg", ".gif")
 
-async def compare_image(original, new, penalty):
-    #to be done later
-    pass
+    image_files = [f for f in all_files if f.lower().endswith(valid_extensions)]
+
+    if not image_files:
+        print("no images in folder")
+        return "/static/default.png"
+
+    random_filename = random.choice(image_files)
+    
+    return f"http://127.0.0.1:65432/static/images/{random_filename}"
+
+async def compare_image(penalty, original=None, new=None):
+    return random.randint(100, 400) - penalty
 
 def classify_prompt(prompt):
-    #to be done later
-    pass
+    return random.choice([True, False])
+
 
 class User:
     def __init__(self, username, id, password):
@@ -32,6 +49,7 @@ class Team:
         self.connected_sockets = {}
         self.team_name = "insert team name here"
         self.score = 0
+        self.rank = None
 
         self.input_queue = asyncio.Queue()
         self.current_image = None
@@ -58,6 +76,8 @@ class GameServer:
 
         self.game_state = GameState.LOGIN_PERIOD
         self.countdown_end_time = 0.0
+
+        self.scores = {}
 
         self.teams = []
 
@@ -108,22 +128,29 @@ class GameServer:
                     if len(self.connected_teams[tid]) < 4 and uid not in self.connected_users:
                         response[JSONFields.AUTHORISED] = Login.ACCEPTED
                         response[JSONFields.USER_ID] = uid
-                        response[JSONFields.TEAM_STATE] = target_team.state
+                        response[JSONFields.TEAM_STATE] = target_team.team_state
 
-                        if target_team.state == TeamState.PLAYING:
+                        if target_team.team_state == TeamState.PLAYING:
                             response[JSONFields.IMAGE] = target_team.current_image
 
                             if target_team.current_turn_uid == uid:
                                 time_left = max(0, target_team.turn_end_time - time.time())
                                 response[JSONFields.IS_PLAYER_TURN] = True
                                 response[JSONFields.TIME] = time_left
+                        
+
+                        if target_team.team_state == TeamState.DONE:
+                            response[JSONFields.TEAM_SCORE] = target_team.score
+                            response[JSONFields.TEAM_RANK] = target_team.rank
 
                         if self.game_state == GameState.COUNTDOWN:
                             time_left = max(0, self.countdown_end_time - time.time())
+                            response[JSONFields.TIME] = time_left
                         
-                        self.connected_users.add(uid)
-                        self.connected_sockets[uid] = socket
+                        if self.game_state == GameState.GAME_OVER:
+                            response[JSONFields.TOP3] = self.rank_teams()
 
+                        self.connected_users.add(uid)
                         self.connected_sockets[uid] = socket
                         self.teams[tid].connected_sockets[uid] = socket 
 
@@ -164,24 +191,40 @@ class GameServer:
 
     async def start_games(self, time_per_round, timeout, penalty):
         tasks = []
+        
         for team in self.teams:
-            
-            team.team_state = TeamState.PLAYING
-            
-            await self.announce_to_users({
+            if len(team.connected_sockets) > 0:
+                team.team_state = TeamState.PLAYING
+                task = asyncio.create_task(self.run_game(team, time_per_round, timeout, penalty))
+                tasks.append(task)
+
+            else:
+                team.team_state = TeamState.DONE
+                team.score = -1 
+                self.scores[team.id] = -1
+
+        if tasks: 
+            await asyncio.gather(*tasks)
+
+            print("All teams finished the game")        
+
+        self.game_state = GameState.GAME_OVER
+
+        
+        top3 = self.rank_teams()
+
+        for team in self.teams:
+            await team.announce_to_team({
                 JSONFields.TYPE: Responses.GAME_STATE_RESPONSE,
-                JSONFields.MESSAGE: GameState.GAME_RUNNING
+                JSONFields.GAME_STATE: GameState.GAME_OVER,
+                JSONFields.TEAM_SCORE: team.score,
+                JSONFields.TEAM_RANK: team.rank,
+                JSONFields.TOP3: top3
             })
-
-            task = asyncio.create_task(self.start_games(team, time_per_round, timeout, penalty))
-
-            tasks.append(task)
-
-            if tasks: 
-                await asyncio.gather(*tasks)
 
     async def run_game(self, team: Team, time_per_round, timeout, penalty):
         no_prompt_penalty = 0
+        penalty_multiplier = self.max_members_per_team/len(team.connected_sockets)
 
         team.current_image = await get_image("default_prompt")
 
@@ -230,8 +273,32 @@ class GameServer:
                             JSONFields.MESSAGE: GamePlay.NOT_RECEIVED
                         })
 
-                        no_prompt_penalty += penalty
+                        no_prompt_penalty += penalty * penalty_multiplier
             except asyncio.TimeoutError:
-                no_prompt_penalty += penalty
+                no_prompt_penalty += penalty * penalty_multiplier
                 continue
+
+        team.team_state = TeamState.DONE
+
+        await team.announce_to_team({
+            JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE,
+            JSONFields.TEAM_STATE: TeamState.DONE
+        })
+
+        team_score = await compare_image(no_prompt_penalty)
+        team.score = team_score
+        self.scores[team.id] = team_score
+
+
+    def rank_teams(self):
+        sorted_scores = sorted(self.scores.items(), key=lambda x: x[1], reverse=True)
+        top3 = sorted_scores[:3]
+
+        for i, (tid, score) in enumerate(sorted_scores):
+           self.teams[tid].rank = i 
+
+        return top3
+                                                 
+
+
 

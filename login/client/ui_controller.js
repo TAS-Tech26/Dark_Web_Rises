@@ -1,71 +1,208 @@
-import { GameClient } from './login.js';
+import { GameClient, GamePlay } from './login.js';
 
+// ** Ensure the port matches your Python server exactly! **
 const game = new GameClient("ws://127.0.0.1:65432/ws");
 
-// DOM Elements
+// --- DOM ELEMENTS ---
+// Screens
 const loginScreen = document.getElementById("login_screen");
 const lobbyScreen = document.getElementById("lobby_screen");
-const usernameInput = document.getElementById("username_input");
-const passwordInput = document.getElementById("password_input");
-const lobbyLog = document.getElementById("lobby_log");
-const rosterList = document.getElementById("roster_list");
+const gameScreen = document.getElementById("game_screen");
+const postgameScreen = document.getElementById("postgame_screen");
 
-// Helper to write to the lobby screen
-function addLog(text, className = "log-msg") {
-    const msg = document.createElement("div");
-    msg.className = className;
-    msg.textContent = text;
-    lobbyLog.appendChild(msg);
-    lobbyLog.scrollTop = lobbyLog.scrollHeight;
+// Game Controls
+const gameImage = document.getElementById("game_image");
+const timerDisplay = document.getElementById("timer_display");
+const activeTurnControls = document.getElementById("active_turn_controls");
+const spectatorMessage = document.getElementById("spectator_message");
+const promptInput = document.getElementById("prompt_input");
+
+// Global Timer Variable (so we can clear it when a turn ends early)
+let currentTimerInterval = null;
+
+
+// --- HELPER FUNCTIONS ---
+
+function addLog(message, cssClass = "log-msg") {
+    const logDiv = document.getElementById("lobby_log");
+    const p = document.createElement("p");
+    p.className = cssClass;
+    p.textContent = message;
+    logDiv.appendChild(p);
+    logDiv.scrollTop = logDiv.scrollHeight; // Auto-scroll to bottom
 }
+
+function showScreen(screenElement) {
+    // Hide all screens
+    loginScreen.style.display = "none";
+    lobbyScreen.style.display = "none";
+    gameScreen.style.display = "none";
+    postgameScreen.style.display = "none";
+    // Show the requested one
+    screenElement.style.display = "block";
+}
+
+function startVisualTimer(seconds) {
+    if (currentTimerInterval) clearInterval(currentTimerInterval);
+    
+    let timeLeft = Math.ceil(seconds);
+    timerDisplay.textContent = `Time: ${timeLeft}s`;
+
+    currentTimerInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft >= 0) {
+            timerDisplay.textContent = `Time: ${timeLeft}s`;
+        } else {
+            clearInterval(currentTimerInterval);
+            timerDisplay.textContent = "Time's up!";
+            // Force a submit if they ran out of time!
+            if (activeTurnControls.style.display === "block") {
+               submitCurrentPrompt();
+            }
+        }
+    }, 1000);
+}
+
 
 // --- NETWORK HOOKS ---
 
-game.on_roster_update = (rosterArray) => {
-    
-    // 1. Wipe the current HTML list clean
-    rosterList.innerHTML = "";
-    
-    // 2. Loop through the JSON array and create a new bullet point for each player
-    rosterArray.forEach(username => {
-        const li = document.createElement("li");
-        li.textContent = username;
-        rosterList.appendChild(li);
-    });
-};
-
+// 1. Lobby/Login Routing
 game.on_login_success = (userId) => {
-    loginScreen.style.display = "none";
-    lobbyScreen.style.display = "block";
-    addLog(`System: You have joined the lobby.`);
+    showScreen(lobbyScreen);
+};
+game.on_logout_success = () => {
+    showScreen(loginScreen);
 };
 
 game.on_login_failed = (status) => {
-    alert("Login failed! Code: " + status);
+    // A simple browser pop-up to warn the user
+    alert("Login failed! Please check your username and password.");
+    
+    // (Optional) Clear the password box
+    document.getElementById("password_input").value = "";
 };
 
-game.on_logout_success = () => {
-    lobbyScreen.style.display = "none";
-    loginScreen.style.display = "block";
-    lobbyLog.innerHTML = ""; // clear log
+// 2. Game Start Transition
+game.on_game_countdown = (seconds) => {
+    // (You can add the visual countdown to the chat log here if you want)
 };
 
-// --- TEAM STATE HOOKS ---
-game.on_team_ready = () => {
-    addLog(`⭐ TEAM IS FULL AND READY! ⭐`, "log-ready");
+game.on_roster_update = (rosterList) => {
+    const rosterUl = document.getElementById("roster_list");
+    rosterUl.innerHTML = ""; // Clear the old list
+    
+    // Add every teammate to the list!
+    rosterList.forEach(name => {
+        let li = document.createElement("li");
+        li.textContent = name;
+        rosterUl.appendChild(li);
+    });
 };
 
-game.on_team_unready = () => {
-    addLog(`⚠️ Team lost a member. Not ready.`, "log-unready");
+game.on_game_start = () => {
+    showScreen(gameScreen);
+    gameImage.style.display = "block";
+    spectatorMessage.textContent = "Match started! Waiting for your turn...";
+    activeTurnControls.style.display = "none";
+};
+
+// 3. The Core Gameplay Loop
+game.run_turn = (imageUrl, timeLimitSeconds) => {
+    // Ensure we are on the game screen (critical for reconnects!)
+    showScreen(gameScreen);
+    
+    // Update the image
+    gameImage.style.display = "block";
+    gameImage.src = imageUrl;
+
+    // Show the input controls
+    activeTurnControls.style.display = "block";
+    spectatorMessage.style.display = "none";
+    
+    // Clear the input box from last time
+    promptInput.value = "";
+    promptInput.focus();
+
+    // Start the clock
+    startVisualTimer(timeLimitSeconds);
+};
+
+// 4. Submission Callbacks
+game.on_prompt_success = (isValid) => {
+    if (currentTimerInterval) clearInterval(currentTimerInterval);
+    activeTurnControls.style.display = "none";
+    spectatorMessage.style.display = "block";
+    
+    if (isValid) {
+        spectatorMessage.textContent = "Prompt accepted! Generating next image...";
+    } else {
+         spectatorMessage.textContent = "Invalid prompt! Moving on...";
+    }
+};
+
+game.on_prompt_fail = () => {
+    if (currentTimerInterval) clearInterval(currentTimerInterval);
+    activeTurnControls.style.display = "none";
+    spectatorMessage.style.display = "block";
+    spectatorMessage.textContent = "You ran out of time! Penalty applied.";
+};
+
+// 5. Post-Game
+game.on_game_over = (teamScore, teamRank, top3Scores) => {
+    showScreen(postgameScreen);
+    
+    const leaderboard = document.getElementById("leaderboard_list");
+    let html = `<h3>Your Score: ${teamScore} (Rank ${teamRank + 1})</h3><hr>`;
+    html += `<h4>Top 3 Teams:</h4><ol>`;
+    
+    // Remember top3Scores is a list of tuples: [[team_id, score], [team_id, score]]
+    top3Scores.forEach(entry => {
+        html += `<li>Team ${entry[0]}: ${entry[1]} pts</li>`;
+    });
+    html += `</ol>`;
+    
+    leaderboard.innerHTML = html;
 };
 
 
 // --- BUTTON ACTIONS ---
 
+// 1. Login Button
 document.getElementById("login_button").addEventListener("click", () => {
-    game.login(usernameInput.value.trim(), passwordInput.value.trim());
+    const user = document.getElementById("username_input").value;
+    const pass = document.getElementById("password_input").value;
+    game.login(user, pass);
 });
 
+// 2. Logout Button
 document.getElementById("logout_button").addEventListener("click", () => {
     game.logout();
+});
+
+// Submit Prompt Logic
+function submitCurrentPrompt() {
+    const text = promptInput.value.trim();
+    if (text.length > 0) {
+        // They typed something!
+        game.send_prompt(GamePlay.PROMPTED, text);
+    } else {
+        // They submitted an empty box (or the timer forced a submit)
+        game.send_prompt(GamePlay.NOT_PROMPTED, "");
+    }
+    
+    // Immediately hide controls so they can't spam click
+    activeTurnControls.style.display = "none";
+    spectatorMessage.style.display = "block";
+    spectatorMessage.textContent = "Submitting...";
+}
+
+document.getElementById("submit_prompt_button").addEventListener("click", () => {
+    submitCurrentPrompt();
+});
+
+// Allow hitting "Enter" in the textbox to submit
+document.getElementById("prompt_input").addEventListener("keypress", (e) => {
+    if (e.key === "Enter") {
+        submitCurrentPrompt();
+    }
 });
