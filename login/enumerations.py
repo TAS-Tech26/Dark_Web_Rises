@@ -62,7 +62,8 @@ class GamePlay(IntEnum):
     NOT_RECEIVED = 3
     IMAGE_IN = 4
     PROMPT_OUT = 5
-    
+
     INVALID_PROMPT = 6
     OUT_OF_CHANCES = 7
+
 
