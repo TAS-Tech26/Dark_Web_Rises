@@ -59,14 +59,16 @@ const TeamState = Object.freeze({
     DONE : 5
 });
 
-const GamePlay = Object.freeze({
-    NOT_PROMPTED : 0,
-    PROMPTED : 1,
-    RECEIVED : 2,
-    NOT_RECEIVED : 3,
-    IMAGE_IN : 4,
-    PROMPT_OUT : 5
-});
+const GamePlay = {
+    NOT_PROMPTED: 0,
+    PROMPTED: 1,
+    RECEIVED: 2,
+    NOT_RECEIVED: 3,
+    IMAGE_IN: 4,
+    PROMPT_OUT: 5,
+    INVALID_PROMPT: 6,  // Must match Python's integer value
+    OUT_OF_CHANCES: 7   // Must match Python's integer value
+};
 
 class GameClient
 {
@@ -208,9 +210,19 @@ class GameClient
                 {
                     if (this.run_turn) this.run_turn(data[JSONFields.IMAGE], data[JSONFields.TIME]);
                 }
-                else if (data[JSONFields.MESSAGE] === GamePlay.RECEIVED)
-                {
-                    if (this.on_prompt_success) this.on_prompt_success(data[JSONFields.PROMPT_STATUS]);
+                // Ensure these map to the correct data type coming from Python (integers)
+                else if (
+                    data[JSONFields.MESSAGE] === GamePlay.RECEIVED || 
+                    data[JSONFields.MESSAGE] === GamePlay.INVALID_PROMPT || 
+                    data[JSONFields.MESSAGE] === GamePlay.OUT_OF_CHANCES
+                ) {
+                    if (this.on_prompt_success) {
+                        this.on_prompt_success(
+                            data[JSONFields.PROMPT_STATUS], 
+                            data[JSONFields.MESSAGE],       // This will now be an integer/enum value
+                            data["attempts_left"]           
+                        );
+                    }
                 }
                 else if (data[JSONFields.MESSAGE] === GamePlay.NOT_RECEIVED)
                 {

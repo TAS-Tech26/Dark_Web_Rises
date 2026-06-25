@@ -1,7 +1,7 @@
 import { GameClient, GamePlay } from './login.js';
 
 // ** Ensure the port matches your Python server exactly! **
-const game = new GameClient("ws://127.0.0.1:65432/ws");
+const game = new GameClient("ws://127.0.0.1:8000/ws");
 
 // --- DOM ELEMENTS ---
 // Screens
@@ -128,18 +128,37 @@ game.run_turn = (imageUrl, timeLimitSeconds) => {
 };
 
 // 4. Submission Callbacks
-game.on_prompt_success = (isValid) => {
-    if (currentTimerInterval) clearInterval(currentTimerInterval);
-    activeTurnControls.style.display = "none";
-    spectatorMessage.style.display = "block";
+game.on_prompt_success = (isValid, serverMessage, attemptsLeft) => {
+    console.log("on_prompt_success called. Valid:", isValid, "Message ID:", serverMessage);
     
+    // Scenario 1: The prompt was perfectly valid!
     if (isValid) {
+        if (currentTimerInterval) clearInterval(currentTimerInterval);
+        activeTurnControls.style.display = "none";
+        spectatorMessage.style.display = "block";
         spectatorMessage.textContent = "Prompt accepted! Generating next image...";
-    } else {
-         spectatorMessage.textContent = "Invalid prompt! Moving on...";
+    } 
+    // Scenario 2: Prompt was invalid, and they are completely out of chances
+    // CHANGED: Match against the Enum property rather than a hardcoded string
+    else if (serverMessage === GamePlay.OUT_OF_CHANCES) {
+        if (currentTimerInterval) clearInterval(currentTimerInterval);
+        activeTurnControls.style.display = "none";
+        spectatorMessage.style.display = "block";
+        spectatorMessage.textContent = "Three strikes! No valid prompt submitted. Moving to the next player...";
+    } 
+    // Scenario 3: Prompt was invalid, but they still have remaining attempts
+    else if (serverMessage === GamePlay.INVALID_PROMPT) {
+        // Re-enable the input controls so they can type another try
+        activeTurnControls.style.display = "block";
+        promptInput.disabled = false;
+        document.getElementById("submit_prompt_button").disabled = false;
+        promptInput.value = "";
+        promptInput.focus();
+        
+        spectatorMessage.style.display = "block";
+        spectatorMessage.textContent = `Invalid prompt! ${attemptsLeft} tries remaining.`;
     }
 };
-
 game.on_prompt_fail = () => {
     if (currentTimerInterval) clearInterval(currentTimerInterval);
     activeTurnControls.style.display = "none";
@@ -183,17 +202,17 @@ document.getElementById("logout_button").addEventListener("click", () => {
 function submitCurrentPrompt() {
     const text = promptInput.value.trim();
     if (text.length > 0) {
-        // They typed something!
         game.send_prompt(GamePlay.PROMPTED, text);
     } else {
-        // They submitted an empty box (or the timer forced a submit)
         game.send_prompt(GamePlay.NOT_PROMPTED, "");
     }
-    
-    // Immediately hide controls so they can't spam click
-    activeTurnControls.style.display = "none";
+
+    // Disable but keep visible — wait for server response
+    promptInput.disabled = true;
+    document.getElementById("submit_prompt_button").disabled = true;
     spectatorMessage.style.display = "block";
     spectatorMessage.textContent = "Submitting...";
+    // ← NO activeTurnControls.style.display = "none" here
 }
 
 document.getElementById("submit_prompt_button").addEventListener("click", () => {
