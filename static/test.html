@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <input id="msg" placeholder="enter a prompt" />
+  <button onclick="send()">Send</button>
+  <pre id="log"></pre>
+  <img id="result-img" src="" style="display:none; max-width:500px;" />
+
+  <script>
+    const ws = new WebSocket("ws://localhost:8000/ws");
+
+    function send() {
+    document.getElementById("log").innerText = "Generating...";
+    ws.send(document.getElementById("msg").value);
+    }
+    
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      console.log(data);  // add this
+      const img = document.getElementById("result-img");
+      img.src = data.url;
+      img.style.display = "block";
+      if (data.type === "image") {
+          const img = document.getElementById("result-img");
+          img.src = data.url;
+          img.style.display = "block";
+      } else if (data.type === "text") {
+          document.getElementById("log").innerText += data.message + "\n";
+      }
+    };
+    function send() {
+      ws.send(document.getElementById("msg").value);
+    }
+  </script>
+</body>
+</html>
