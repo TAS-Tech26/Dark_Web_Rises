@@ -4,7 +4,7 @@ import json
 import base64
 from io import BytesIO
 from huggingface_hub import AsyncInferenceClient
-import compare as cmp
+import tests.compare as cmp
 import asyncio
 #most of the types of responses that i think wud be sent to the players during the whole round
 '''

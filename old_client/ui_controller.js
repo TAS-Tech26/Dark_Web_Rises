@@ -67,6 +67,25 @@ function startVisualTimer(seconds) {
 // --- NETWORK HOOKS ---
 
 // 1. Lobby/Login Routing
+// Start the login button as disabled by default so they can't click it early
+const loginButton = document.getElementById("login_button");
+loginButton.disabled = true;
+loginButton.textContent = "Connecting to Server...";
+
+// When the server successfully answers the WebSocket handshake
+game.on_connected = () => {
+    console.log("WebSocket connected successfully!");
+    loginButton.disabled = false;
+    loginButton.textContent = "Login";
+};
+
+// If the server drops or was never online in the first place
+game.on_disconnected = () => {
+    loginButton.disabled = true;
+    loginButton.textContent = "Server Offline";
+    alert("❌ Connection failed. Please ensure your FastAPI server is running on port 8000.");
+};
+
 game.on_login_success = (userId) => {
     showScreen(lobbyScreen);
 };
@@ -166,6 +185,31 @@ game.on_prompt_fail = () => {
     spectatorMessage.textContent = "You ran out of time! Penalty applied.";
 };
 
+game.on_round_over = (round, roundScore, totalScore, countdown) => {
+    console.log("on_round_over FIRED", round, roundScore);
+    const overlay = document.getElementById("round_over_overlay");
+    overlay.style.display = "block";
+    
+    document.getElementById("round_over_title").textContent = `Round ${round} Complete!`;
+    document.getElementById("round_score_display").textContent = `Round Score: ${roundScore}`;
+    document.getElementById("total_score_display").textContent = `Total Score: ${totalScore}`;
+
+    // 10s countdown
+    let timeLeft = countdown;
+    document.getElementById("round_countdown").textContent = `Next round in ${timeLeft}s...`;
+    
+    const countdownInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById("round_countdown").textContent = `Next round in ${timeLeft}s...`;
+        if (timeLeft <= 0) {
+            clearInterval(countdownInterval);
+            overlay.style.display = "none";
+        }
+    }, 1000);
+    promptInput.disabled = false;
+    document.getElementById("submit_prompt_button").disabled = false;
+    console.log("on_round_over FIRED", round, roundScore);
+};
 // 5. Post-Game
 game.on_game_over = (teamScore, teamRank, top3Scores) => {
     showScreen(postgameScreen);
@@ -200,6 +244,12 @@ document.getElementById("logout_button").addEventListener("click", () => {
 
 // Submit Prompt Logic
 function submitCurrentPrompt() {
+    // Check if WebSocket is actually OPEN (State 1)
+    if (game.socket.readyState !== WebSocket.OPEN) {
+        alert("Cannot submit prompt: Lost connection to the server! Please restart your FastAPI backend.");
+        return;
+    }
+
     const text = promptInput.value.trim();
     if (text.length > 0) {
         game.send_prompt(GamePlay.PROMPTED, text);
@@ -207,12 +257,10 @@ function submitCurrentPrompt() {
         game.send_prompt(GamePlay.NOT_PROMPTED, "");
     }
 
-    // Disable but keep visible — wait for server response
     promptInput.disabled = true;
     document.getElementById("submit_prompt_button").disabled = true;
     spectatorMessage.style.display = "block";
     spectatorMessage.textContent = "Submitting...";
-    // ← NO activeTurnControls.style.display = "none" here
 }
 
 document.getElementById("submit_prompt_button").addEventListener("click", () => {

@@ -17,6 +17,8 @@ const JSONFields = Object.freeze({
     TIME : "time",
     IS_PLAYER_TURN : "is_player_turn",
     PROMPT_STATUS : "prompt_status",
+    ROUND : "round",
+    ROUND_SCORE : "round_score",
     TEAM_SCORE : "team_score",
     TEAM_RANK : "team_rank",
     TOP3 : "top3"
@@ -48,7 +50,8 @@ const GameState = Object.freeze({
     PREGAME : 1,
     GAME_RUNNING : 2,
     COUNTDOWN : 3,
-    GAME_OVER : 4
+    GAME_OVER : 4,
+    ROUND_OVER :6
 });
 
 const TeamState = Object.freeze({
@@ -66,8 +69,8 @@ const GamePlay = {
     NOT_RECEIVED: 3,
     IMAGE_IN: 4,
     PROMPT_OUT: 5,
-    INVALID_PROMPT: 6,  // Must match Python's integer value
-    OUT_OF_CHANCES: 7   // Must match Python's integer value
+    INVALID_PROMPT: 6, 
+    OUT_OF_CHANCES: 7   
 };
 
 class GameClient
@@ -95,11 +98,11 @@ class GameClient
 
         this.on_prompt_success = null;
         this.on_prompt_fail = null;
-
         this.on_team_done = null;
 
         this.on_game_countdown = null;
 
+        this.on_round_over = null;
         this.on_game_over = null;
 
         //router
@@ -186,6 +189,15 @@ class GameClient
                 {
                     if (this.on_game_start) this.on_game_start();
                 }
+                else if(data[JSONFields.GAME_STATE] === GameState.ROUND_OVER)
+                {
+                    if (this.on_round_over) this.on_round_over(
+                        data[JSONFields.ROUND],        // which round just ended
+                        data[JSONFields.ROUND_SCORE],  // score for this round only
+                        data[JSONFields.TEAM_SCORE],   // cumulative score so far
+                        data[JSONFields.TIME]          // 10s countdown
+                    )
+                }
                 else if (data[JSONFields.GAME_STATE] === GameState.GAME_OVER)
                 {
                     if (this.on_game_over) this.on_game_over(data[JSONFields.TEAM_SCORE], data[JSONFields.TEAM_RANK], data[JSONFields.TOP3]);
@@ -196,7 +208,9 @@ class GameClient
             {
                 if (data[JSONFields.TEAM_STATE] === TeamState.JOINED || data[JSONFields.TEAM_STATE] === TeamState.LEFT) 
                 {
-                    if (this.on_roster_update) this.on_roster_update(data[JSONFields.USERNAME]);
+                    if (this.on_roster_update) {
+                        this.on_roster_update(Array.isArray(data[JSONFields.USERNAME]) ? data[JSONFields.USERNAME] : [data[JSONFields.USERNAME]]);
+                    }
                 }
                 else if (data[JSONFields.TEAM_STATE] === TeamState.DONE)
                 {
@@ -210,7 +224,6 @@ class GameClient
                 {
                     if (this.run_turn) this.run_turn(data[JSONFields.IMAGE], data[JSONFields.TIME]);
                 }
-                // Ensure these map to the correct data type coming from Python (integers)
                 else if (
                     data[JSONFields.MESSAGE] === GamePlay.RECEIVED || 
                     data[JSONFields.MESSAGE] === GamePlay.INVALID_PROMPT || 
@@ -229,6 +242,18 @@ class GameClient
                     if (this.on_prompt_fail) this.on_prompt_fail();
                 }
             }
+        };
+        // Expose connection state hooks to the UI controller
+        this.socket.onopen = () => {
+            if (this.on_connected) this.on_connected();
+        };
+
+        this.socket.onclose = () => {
+            if (this.on_disconnected) this.on_disconnected();
+        };
+
+        this.socket.onerror = (err) => {
+            if (this.on_connection_error) this.on_connection_error(err);
         };
     }
 
@@ -253,8 +278,7 @@ class GameClient
             [JSONFields.STATUS]: prompt_status,
             [JSONFields.PROMPT]: prompt
         }));
-    }
-    
+    }    
 }
 
 export { GameClient, Login, JSONFields, Responses, NameStatus, GamePlay };

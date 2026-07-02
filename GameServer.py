@@ -2,6 +2,7 @@ from enumerations import JSONFields, Login, NameStatus, Responses, GameState, Te
 from fastapi import FastAPI, WebSocket, Depends, WebSocketDisconnect
 import time
 import json
+import httpx
 import asyncio
 import random
 import os
@@ -32,13 +33,12 @@ COMMON_WORDS = {
 
 image_comparator, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
 image_comparator.eval()
-
+custom_timeout = httpx.Timeout(60.0, connect=10.0, read=None, write=20.0)
 imagegen_client = AsyncInferenceClient(
-    provider="nscale",
-    api_key="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",
-    timeout=120
-
-)
+        model="stabilityai/stable-diffusion-xl-base-1.0",  # Free tier friendly
+        token="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",            # Explicit token argument
+        timeout=custom_timeout
+    )
 
 def load_image(img_input):
     if isinstance(img_input, str) and img_input.startswith("data:image"):
@@ -138,7 +138,7 @@ class Team:
         self.members = []
         self.connected_sockets = {}
         self.team_name = "insert team name here"
-        self.score = 0
+        self.score = []
         self.rank = None
 
         self.input_queue = asyncio.Queue()
@@ -281,7 +281,7 @@ class GameServer:
             await socket.send_json(message)
     
 
-    async def start_games(self, time_per_round, timeout, penalty):
+    '''async def start_games(self, time_per_round, timeout, penalty):
         tasks = []
         
         for team in self.teams:
@@ -318,91 +318,103 @@ class GameServer:
         round = 0
         no_prompt_penalty = 5
         penalty_multiplier = self.max_members_per_team/len(team.connected_sockets)
+        for round in range(5):
+            team.current_image = await get_image("default_prompt")
+            team.images.append([])
+            team.images[round].append(team.current_image)
+            team.original_image = team.current_image
 
-        team.current_image = await get_image("default_prompt")
-        team.images.append([])
-        team.images[round].append(team.current_image)
-        team.original_image = team.current_image
+            for uid in team.members:
+                team.current_turn_uid = uid
+                team.turn_end_time = time.time() + time_per_round
 
-        for uid in team.members:
-            team.current_turn_uid = uid
-            team.turn_end_time = time.time() + time_per_round
+                if uid in team.connected_sockets:
+                    await team.connected_sockets[uid].send_json({
+                        JSONFields.TYPE: Responses.GAMEPLAY_RESPONSE,
+                        JSONFields.MESSAGE: GamePlay.IMAGE_IN,
+                        JSONFields.IS_PLAYER_TURN: True,
+                        JSONFields.IMAGE: team.current_image,
+                        JSONFields.TIME: time_per_round
+                    })
+                while True:
+                    try: 
+                        time_left = team.turn_end_time - time.time()
+                        if time_left > 0:
+                            data = await asyncio.wait_for(team.input_queue.get(), timeout=time_left)
+                        else:
+                            raise asyncio.TimeoutError()
+                        #making a set of attempts done by each player in their turn
+                        if not hasattr(team, "player_attempts"):
+                            team.player_attempts = {}
+                        if uid not in team.player_attempts:
+                            team.player_attempts[uid] = 0
 
-            if uid in team.connected_sockets:
-                await team.connected_sockets[uid].send_json({
-                    JSONFields.TYPE: Responses.GAMEPLAY_RESPONSE,
-                    JSONFields.MESSAGE: GamePlay.IMAGE_IN,
-                    JSONFields.IS_PLAYER_TURN: True,
-                    JSONFields.IMAGE: team.current_image,
-                    JSONFields.TIME: time_per_round
-                })
-            while True:
-                try: 
-                    time_left = team.turn_end_time - time.time()
-                    if time_left > 0:
-                        data = await asyncio.wait_for(team.input_queue.get(), timeout=time_left)
-                    else:
-                        raise asyncio.TimeoutError()
-                    #making a set of attempts done by each player in their turn
-                    if not hasattr(team, "player_attempts"):
-                        team.player_attempts = {}
-                    if uid not in team.player_attempts:
-                        team.player_attempts[uid] = 0
+                        if data.get(JSONFields.STATUS) == GamePlay.PROMPTED:
+                            current_prompt = data.get(JSONFields.PROMPT)
+                            is_prompt_valid = classify_prompt(prompt=current_prompt)
 
-                    if data.get(JSONFields.STATUS) == GamePlay.PROMPTED:
-                        current_prompt = data.get(JSONFields.PROMPT)
-                        is_prompt_valid = classify_prompt(prompt=current_prompt)
-
-                        if is_prompt_valid:
-                            team.current_image = await get_image(prompt=data.get(JSONFields.PROMPT))
-                            team.images[round].append(team.current_image)
+                            if is_prompt_valid:
+                                team.current_image = await get_image(prompt=data.get(JSONFields.PROMPT))
+                                team.images[round].append(team.current_image)
+                                if uid in team.connected_sockets:
+                                    await team.connected_sockets[uid].send_json({
+                                        JSONFields.TYPE: Responses.GAMEPLAY_RESPONSE,
+                                        JSONFields.PROMPT_STATUS: is_prompt_valid,
+                                        JSONFields.MESSAGE: GamePlay.RECEIVED
+                                    }) 
+                                break
+                            else:
+                                # 2. INVALID PROMPT SUBMITTED
+                                team.player_attempts[uid] += 1  # Increment the individual player's tracker
+                                current_attempts = team.player_attempts[uid]
+                                
+                                if current_attempts >= 3:
+                                    # 3. STRIKE THREE -> FORCED TURN END
+                                    if uid in team.connected_sockets:
+                                        await team.connected_sockets[uid].send_json({
+                                            JSONFields.TYPE: Responses.GAMEPLAY_RESPONSE,
+                                            JSONFields.PROMPT_STATUS: False,
+                                            # Use .value or the Enum integer explicitly so JS knows what to expect
+                                            JSONFields.MESSAGE: GamePlay.OUT_OF_CHANCES.value, 
+                                            "attempts_left": 0
+                                        })
+                                    no_prompt_penalty += penalty * penalty_multiplier
+                                    team.player_attempts[uid] = 0
+                                    break # Break the while loop to skip to the next player
+                                
+                                else:
+                                    # 4. STILL HAS CHANCES LEFT -> TRY AGAIN
+                                    if uid in team.connected_sockets:
+                                        await team.connected_sockets[uid].send_json({
+                                            JSONFields.TYPE: Responses.GAMEPLAY_RESPONSE,
+                                            JSONFields.PROMPT_STATUS: False,
+                                            JSONFields.MESSAGE: GamePlay.INVALID_PROMPT,#.value was removed
+                                            "attempts_left": 3 - current_attempts 
+                                        })
+                        elif data.get(JSONFields.STATUS) == GamePlay.NOT_PROMPTED:
                             if uid in team.connected_sockets:
                                 await team.connected_sockets[uid].send_json({
                                     JSONFields.TYPE: Responses.GAMEPLAY_RESPONSE,
-                                    JSONFields.PROMPT_STATUS: is_prompt_valid,
-                                    JSONFields.MESSAGE: GamePlay.RECEIVED
-                                }) 
-                            break
-                        else:
-                            # 2. INVALID PROMPT SUBMITTED
-                            team.player_attempts[uid] += 1  # Increment the individual player's tracker
-                            current_attempts = team.player_attempts[uid]
-                            
-                            if current_attempts >= 3:
-                                # 3. STRIKE THREE -> FORCED TURN END
-                                if uid in team.connected_sockets:
-                                    await team.connected_sockets[uid].send_json({
-                                        JSONFields.TYPE: Responses.GAMEPLAY_RESPONSE,
-                                        JSONFields.PROMPT_STATUS: False,
-                                        # Use .value or the Enum integer explicitly so JS knows what to expect
-                                        JSONFields.MESSAGE: GamePlay.OUT_OF_CHANCES.value, 
-                                        "attempts_left": 0
-                                    })
+                                    JSONFields.MESSAGE: GamePlay.NOT_RECEIVED
+                                })
                                 no_prompt_penalty += penalty * penalty_multiplier
-                                team.player_attempts[uid] = 0
-                                break # Break the while loop to skip to the next player
+                                break
                             
-                            else:
-                                # 4. STILL HAS CHANCES LEFT -> TRY AGAIN
-                                if uid in team.connected_sockets:
-                                    await team.connected_sockets[uid].send_json({
-                                        JSONFields.TYPE: Responses.GAMEPLAY_RESPONSE,
-                                        JSONFields.PROMPT_STATUS: False,
-                                        JSONFields.MESSAGE: GamePlay.INVALID_PROMPT,#.value was removed
-                                        "attempts_left": 3 - current_attempts 
-                                    })
-                    elif data.get(JSONFields.STATUS) == GamePlay.NOT_PROMPTED:
-                        if uid in team.connected_sockets:
-                            await team.connected_sockets[uid].send_json({
-                                JSONFields.TYPE: Responses.GAMEPLAY_RESPONSE,
-                                JSONFields.MESSAGE: GamePlay.NOT_RECEIVED
-                            })
-                            no_prompt_penalty += penalty * penalty_multiplier
-                            break
-                        
-                except (asyncio.TimeoutError, TimeoutError):
-                    no_prompt_penalty += penalty * penalty_multiplier
-                    break
+                    except (asyncio.TimeoutError, TimeoutError):
+                        no_prompt_penalty += penalty * penalty_multiplier
+                        break
+
+            round_score = await compare_image(no_prompt_penalty,team.original_image,team.current_image)
+            team.score.append(round_score)
+            await team.announce_to_team({
+                JSONFields.TYPE: Responses.GAME_STATE_RESPONSE,
+                JSONFields.GAME_STATE: GameState.ROUND_OVER,
+                JSONFields.ROUND: round + 1,
+                JSONFields.ROUND_SCORE: round_score,
+                JSONFields.TEAM_SCORE: sum(team.score),
+                JSONFields.TIME: 10
+            })
+            await asyncio.sleep(10)
 
         team.team_state = TeamState.DONE
 
@@ -411,9 +423,7 @@ class GameServer:
             JSONFields.TEAM_STATE: TeamState.DONE
         })
 
-        team_score = await compare_image(no_prompt_penalty,team.original_image,team.current_image)
-        team.score = team_score
-        self.scores[team.id] = team_score
+        self.scores[team.id] = sum(team.score)'''
 
 
     def rank_teams(self):

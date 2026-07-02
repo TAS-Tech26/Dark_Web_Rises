@@ -18,6 +18,8 @@ class JSONFields(StrEnum):
     TIME = "time"
     IS_PLAYER_TURN = "is_player_turn"
     PROMPT_STATUS = "prompt_status"
+    ROUND = 'round'
+    ROUND_SCORE = 'round_score'
     TEAM_SCORE = "team_score"
     TEAM_RANK = "team_rank"
     TOP3 = "top3"
@@ -47,6 +49,7 @@ class GameState(IntEnum):
     GAME_RUNNING = 2
     COUNTDOWN = 3
     GAME_OVER = 4
+    ROUND_OVER = 6
 
 class TeamState(IntEnum):
     WAITING = 0
