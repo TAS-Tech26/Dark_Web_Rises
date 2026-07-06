@@ -1,0 +1,8 @@
+BUGS TO HANDLE
+-handling reconnection exactly when /admin/rungame fires
+
+
+BUGS RESOLVED
+-move the run_games and start_games to the orchestration file
+-prompting in second round
+-new image to be loaded in next rounds

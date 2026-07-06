@@ -110,6 +110,8 @@ async def run_game(game: GameServer, team: Team, time_per_round, timeout, penalt
                     except (asyncio.TimeoutError, TimeoutError):
                         no_prompt_penalty += penalty * penalty_multiplier
                         break
+            team.members = team.members[1::]+[team.members[0]]
+            
 
             round_score = await compare_image(no_prompt_penalty,team.original_image,team.current_image)
             team.score.append(round_score)
