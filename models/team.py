@@ -33,9 +33,22 @@ class Team:
         self.rotation_order = []
         self.prompt_submitted = False
 
-    async def announce_to_team(self, message):
-        for uid, socket in self.connected_sockets.items():
-            await socket.send_json(message)
+    async def safe_send(self, member_id, socket, payload):
+        try:
+            # If the TCP buffer is backed up or dead, cut it off after 1.5 seconds
+            await asyncio.wait_for(socket.send_json(payload), timeout=1.5)
+        except (asyncio.TimeoutError, Exception) as e:
+            print(f"Ghost socket detected for {member_id}: {e}")
+            if member_id in self.connected_sockets:
+                del self.connected_sockets[member_id]
+
+    async def announce_to_team(self, payload):
+        tasks = [
+            self.safe_send(member_id, socket, payload)
+            for member_id, socket in list(self.connected_sockets.items())
+        ]
+        await asyncio.gather(*tasks, return_exceptions=True)
+
     async def run_game(self, scores,max_members_per_team:int,time_per_round, timeout, penalty):
         no_prompt_penalty = 5
         penalty_multiplier = self.max_members / max(1, len(self.connected_sockets))
@@ -61,7 +74,7 @@ class Team:
                 for member_uid, socket in self.connected_sockets.items():
                     if member_uid == uid:
                         # 1. The Active Player: Gets the actual gameplay image and turn controls
-                        await socket.send_json({
+                        await self.safe_send(member_uid,socket,{
                             JSONFields.TYPE: Responses.GAMEPLAY_RESPONSE,
                             JSONFields.MESSAGE: GamePlay.IMAGE_IN,
                             JSONFields.IS_PLAYER_TURN: True,
@@ -70,7 +83,7 @@ class Team:
                         })
                     else:
                         # 2. Everyone Else: Gets the customized "WAIT_YOUR_TURN_IMAGE" SVG payload
-                        await socket.send_json({
+                        await self.safe_send(member_uid,socket,{
                             JSONFields.TYPE: Responses.GAMEPLAY_RESPONSE,
                             JSONFields.MESSAGE: GamePlay.IMAGE_IN,
                             JSONFields.IS_PLAYER_TURN: False,
@@ -162,10 +175,9 @@ class Team:
             await asyncio.sleep(10)
 
         self.team_state = TeamState.DONE
+        scores[self.id] = sum(self.score)
 
         await self.announce_to_team({
             JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE,
             JSONFields.TEAM_STATE: TeamState.DONE
         })
-
-        scores[self.id] = sum(self.score)

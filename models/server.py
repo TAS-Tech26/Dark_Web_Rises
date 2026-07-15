@@ -2,6 +2,7 @@ import time
 from enumerations import JSONFields, Login, NameStatus, Responses, GameState, TeamState, GamePlay
 from models.player import User
 from models.team import Team, WAIT_YOUR_TURN_IMAGE
+import asyncio
 
 class GameServer:
     def __init__(self, server_id, max_teams, max_members_per_team, team_names, user_data): #team names later
@@ -140,6 +141,15 @@ class GameServer:
     async def announce_to_users(self, message):
         for uid, socket in self.connected_sockets.items():
             await socket.send_json(message)
+            
+    async def announce_to_users(self, payload):
+        tasks = []
+        for member_id, socket in list(self.connected_sockets.items()):
+            team_id = self.users[member_id].team_id
+            target_team = self.teams[team_id]
+            tasks.append(target_team.safe_send(member_id, socket, payload))
+            
+        await asyncio.gather(*tasks, return_exceptions=True)
     
     def rank_teams(self):
         sorted_scores = sorted(self.scores.items(), key=lambda x: x[1], reverse=True)

@@ -115,11 +115,11 @@ async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_gam
         if current_user_id is not None:
             if current_user_id in game.connected_users:
                 game.connected_users.remove(current_user_id)
-                game.connected_sockets.pop(current_user_id)
+                game.connected_sockets.pop(current_user_id,None)
 
             if current_user_id in game.connected_teams[current_team_id]:
                 game.connected_teams[current_team_id].remove(current_user_id)
-                game.teams[current_team_id].connected_sockets.pop(current_user_id)
+                game.teams[current_team_id].connected_sockets.pop(current_user_id,None)
 
             await game.teams[current_team_id].announce_to_team({JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE,
                                                           JSONFields.TEAM_STATE: TeamState.LEFT,
