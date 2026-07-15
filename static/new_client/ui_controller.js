@@ -117,20 +117,33 @@ game.on_game_start = () => {
     activeTurnControls.style.display = "none";
 };
 
-game.run_turn = (imageUrl, timeLimitSeconds) => {
+game.run_turn = (imageUrl, timeLimitSeconds, isPlayerTurn) => {
     showScreen(gameScreen);
     
+    // 1. Update the image to show either the Wait SVG or the actual game image
     gameImage.style.display = "block";
     gameImage.src = imageUrl;
 
-    activeTurnControls.style.display = "block";
-    spectatorMessage.style.display = "none";
-    
-    promptInput.value = "";
-    promptInput.disabled = false;
-    document.getElementById("submit_prompt_button").disabled = false;
-    promptInput.focus();
+    // 2. Conditionally show controls based on isPlayerTurn
+    if (isPlayerTurn) {
+        // Active prompter's view
+        activeTurnControls.style.display = "block";
+        spectatorMessage.style.display = "none";
+        
+        promptInput.value = "";
+        promptInput.disabled = false;
+        document.getElementById("submit_prompt_button").disabled = false;
+        promptInput.focus();
+    } else {
+        // Non-active player's view (Waiting)
+        activeTurnControls.style.display = "none";
+        
+        // Show a helpful waiting message
+        spectatorMessage.style.display = "block";
+        spectatorMessage.textContent = "Waiting for the active player to prompt...";
+    }
 
+    // 3. Keep the timer running for everyone so they know how much time is left
     startVisualTimer(timeLimitSeconds);
 };
 

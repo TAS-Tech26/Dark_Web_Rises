@@ -124,15 +124,13 @@ class GameClient {
                     }
 
                     if (data[JSONFields.TEAM_STATE] === TeamState.PLAYING) {
-                        if (data[JSONFields.IS_PLAYER_TURN] === true) {
-                            if (this.run_turn) this.run_turn(data[JSONFields.IMAGE], data[JSONFields.TIME]);
-                        } else {
-                            if (this.on_game_start) this.on_game_start();
-                            const gi = document.getElementById("game_image");
-                            if (gi && data[JSONFields.IMAGE]) {
-                                gi.src = data[JSONFields.IMAGE];
-                                gi.style.display = "block";
-                            }
+                        // Pass the image, time limit, and the turn status directly to run_turn
+                        if (this.run_turn) {
+                            this.run_turn(
+                                data[JSONFields.IMAGE], 
+                                data[JSONFields.TIME], 
+                                data[JSONFields.IS_PLAYER_TURN]
+                            );
                         }
                     } else if (data[JSONFields.TEAM_STATE] === TeamState.DONE) {
                         if (data[JSONFields.GAME_STATE] === GameState.GAME_RUNNING) {
@@ -171,7 +169,18 @@ class GameClient {
                     if (this.on_game_over) this.on_game_over(data[JSONFields.TEAM_SCORE], data[JSONFields.TEAM_RANK], data[JSONFields.TOP3]);
                 }
             }
-
+    
+            else if (data[JSONFields.TYPE] === Responses.GAMEPLAY_RESPONSE) {
+                if (data[JSONFields.MESSAGE] === GamePlay.IMAGE_IN) {
+                    if (this.run_turn) {
+                        this.run_turn(
+                            data[JSONFields.IMAGE], 
+                            data[JSONFields.TIME], 
+                            data[JSONFields.IS_PLAYER_TURN]
+                        );
+                    }
+                }
+            }
             else if (data[JSONFields.TYPE] === Responses.TEAM_STATE_RESPONSE) {
                 if (data[JSONFields.TEAM_STATE] === TeamState.JOINED || data[JSONFields.TEAM_STATE] === TeamState.LEFT) {
                     if (this.on_roster_update) this.on_roster_update(data[JSONFields.USERNAME]);
@@ -180,25 +189,6 @@ class GameClient {
                 }
             }
 
-            else if (data[JSONFields.TYPE] === Responses.GAMEPLAY_RESPONSE) {
-                if (data[JSONFields.MESSAGE] === GamePlay.IMAGE_IN && data[JSONFields.IS_PLAYER_TURN] === true) {
-                    if (this.run_turn) this.run_turn(data[JSONFields.IMAGE], data[JSONFields.TIME]);
-                } else if (
-                    data[JSONFields.MESSAGE] === GamePlay.RECEIVED || 
-                    data[JSONFields.MESSAGE] === GamePlay.INVALID_PROMPT || 
-                    data[JSONFields.MESSAGE] === GamePlay.OUT_OF_CHANCES
-                ) {
-                    if (this.on_prompt_success) {
-                        this.on_prompt_success(
-                            data[JSONFields.PROMPT_STATUS], 
-                            data[JSONFields.MESSAGE],
-                            data["attempts_left"]           
-                        );
-                    }
-                } else if (data[JSONFields.MESSAGE] === GamePlay.NOT_RECEIVED) {
-                    if (this.on_prompt_fail) this.on_prompt_fail();
-                }
-            }
         };
     }
 

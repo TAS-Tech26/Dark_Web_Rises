@@ -1,7 +1,7 @@
 import time
-from enumerations import JSONFields, Login, NameStatus, Responses, GameState, TeamState
+from enumerations import JSONFields, Login, NameStatus, Responses, GameState, TeamState, GamePlay
 from models.player import User
-from models.team import Team
+from models.team import Team, WAIT_YOUR_TURN_IMAGE
 
 class GameServer:
     def __init__(self, server_id, max_teams, max_members_per_team, team_names, user_data): #team names later
@@ -69,14 +69,27 @@ class GameServer:
                         response[JSONFields.AUTHORISED] = Login.ACCEPTED
                         response[JSONFields.USER_ID] = uid
                         response[JSONFields.TEAM_STATE] = target_team.team_state
-
+                        
                         if target_team.team_state == TeamState.PLAYING:
-                            response[JSONFields.IMAGE] = target_team.current_image
+                            is_active_player = (target_team.current_turn_uid == uid)
+                            if is_active_player:
+                                resolved_image = target_team.current_image
+                            else:
+                                resolved_image = WAIT_YOUR_TURN_IMAGE
 
-                            if target_team.current_turn_uid == uid:
-                                time_left = max(0, target_team.turn_end_time - time.time())
+                            response[JSONFields.IMAGE] = resolved_image
+                            response[JSONFields.TIME] = max(0.0, target_team.turn_end_time - time.time())
+                            response[JSONFields.TEAM_STATE] = target_team.team_state
+
+                            if is_active_player:
                                 response[JSONFields.IS_PLAYER_TURN] = True
-                                response[JSONFields.TIME] = time_left
+                                if target_team.prompt_submitted:
+                                    response[JSONFields.PROMPT_STATUS] = GamePlay.PROMPTED
+                                else:
+                                    response[JSONFields.PROMPT_STATUS] = GamePlay.NOT_PROMPTED
+                            else:
+                                response[JSONFields.IS_PLAYER_TURN] = False
+                                response[JSONFields.PROMPT_STATUS] = GamePlay.IMAGE_IN
                         
 
                         if target_team.team_state == TeamState.DONE:

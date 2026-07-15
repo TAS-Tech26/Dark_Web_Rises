@@ -3,6 +3,14 @@ import asyncio
 from enumerations import JSONFields, Responses, GameState, TeamState, GamePlay
 from services.ai_handling import get_image, compare_image, classify_prompt
 
+WAIT_YOUR_TURN_IMAGE = (
+    "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1024' height='1024' viewBox='0 0 1024 1024'>"
+    "<rect width='100%' height='100%' fill='%23121214'/>"
+    "<text x='50%' y='50%' font-family='monospace' font-size='32' fill='%239ca3af' text-anchor='middle' dominant-baseline='middle'>"
+    "WAITING FOR ACTIVE PLAYER TO PROMPT..."
+    "</text></svg>"
+)
+
 class Team:
     def __init__(self, id, max_members):
         self.team_state = TeamState.WAITING
@@ -21,35 +29,54 @@ class Team:
         self.turn_end_time = 0.0
         self.images = []
         self.prompt_attempts = 0
-        
+        self.round = 0
+        self.rotation_order = []
+        self.prompt_submitted = False
 
     async def announce_to_team(self, message):
         for uid, socket in self.connected_sockets.items():
             await socket.send_json(message)
     async def run_game(self, scores,max_members_per_team:int,time_per_round, timeout, penalty):
-        round = 0
         no_prompt_penalty = 5
         penalty_multiplier = self.max_members / max(1, len(self.connected_sockets))
 
-        rotation_order = list(self.members)
-        for round in range(5):
+        self.rotation_order = list(self.members)
+        for self.round in range(5):
             self.current_image = await get_image("default_prompt")
             self.images.append([])
-            self.images[round].append(self.current_image)
+            self.images[self.round].append(self.current_image)
             self.original_image = self.current_image
 
-            for uid in rotation_order:
+            for uid in self.rotation_order:
                 self.current_turn_uid = uid
                 self.turn_end_time = time.time() + time_per_round
 
-                if uid in self.connected_sockets:
-                    await self.connected_sockets[uid].send_json({
-                        JSONFields.TYPE: Responses.GAMEPLAY_RESPONSE,
-                        JSONFields.MESSAGE: GamePlay.IMAGE_IN,
-                        JSONFields.IS_PLAYER_TURN: True,
-                        JSONFields.IMAGE: self.current_image,
-                        JSONFields.TIME: time_per_round
-                    })
+                while not self.input_queue.empty():
+                    try:
+                        self.input_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                
+                # Loop through all connected sockets to handle active player vs spectators separately
+                for member_uid, socket in self.connected_sockets.items():
+                    if member_uid == uid:
+                        # 1. The Active Player: Gets the actual gameplay image and turn controls
+                        await socket.send_json({
+                            JSONFields.TYPE: Responses.GAMEPLAY_RESPONSE,
+                            JSONFields.MESSAGE: GamePlay.IMAGE_IN,
+                            JSONFields.IS_PLAYER_TURN: True,
+                            JSONFields.IMAGE: self.current_image,
+                            JSONFields.TIME: time_per_round
+                        })
+                    else:
+                        # 2. Everyone Else: Gets the customized "WAIT_YOUR_TURN_IMAGE" SVG payload
+                        await socket.send_json({
+                            JSONFields.TYPE: Responses.GAMEPLAY_RESPONSE,
+                            JSONFields.MESSAGE: GamePlay.IMAGE_IN,
+                            JSONFields.IS_PLAYER_TURN: False,
+                            JSONFields.IMAGE: WAIT_YOUR_TURN_IMAGE,
+                            JSONFields.TIME: time_per_round
+                        })
                 while True:
                     try: 
                         time_left = self.turn_end_time - time.time()
@@ -68,8 +95,9 @@ class Team:
                             is_prompt_valid = classify_prompt(prompt=current_prompt)
 
                             if is_prompt_valid:
+                                self.prompt_submitted = True
                                 self.current_image = await get_image(prompt=data.get(JSONFields.PROMPT))
-                                self.images[round].append(self.current_image)
+                                self.images[self.round].append(self.current_image)
                                 if uid in self.connected_sockets:
                                     await self.connected_sockets[uid].send_json({
                                         JSONFields.TYPE: Responses.GAMEPLAY_RESPONSE,
@@ -117,7 +145,8 @@ class Team:
                     except (asyncio.TimeoutError, TimeoutError):
                         no_prompt_penalty += penalty * penalty_multiplier
                         break
-            rotation_order = rotation_order[1:] + [rotation_order[0]]
+                self.prompt_submitted = False
+            self.rotation_order = self.rotation_order[1:] + [self.rotation_order[0]]
             
 
             round_score = await compare_image(no_prompt_penalty,self.original_image,self.current_image)
@@ -125,7 +154,7 @@ class Team:
             await self.announce_to_team({
                 JSONFields.TYPE: Responses.GAME_STATE_RESPONSE,
                 JSONFields.GAME_STATE: GameState.ROUND_OVER,
-                JSONFields.ROUND: round + 1,
+                JSONFields.ROUND: self.round + 1,
                 JSONFields.ROUND_SCORE: round_score,
                 JSONFields.TEAM_SCORE: sum(self.score),
                 JSONFields.TIME: 10
