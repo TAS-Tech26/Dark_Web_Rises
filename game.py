@@ -4,6 +4,10 @@ from fastapi import FastAPI, WebSocket, Depends, WebSocketDisconnect, Header, HT
 from fastapi.staticfiles import StaticFiles
 from enumerations import JSONFields, Login, Responses, GameState, TeamState, GamePlay
 from models.server import GameServer
+import json
+import os
+
+STATE_FILE = "game_state.json"
 
 server = GameServer(server_id=0,
                     max_teams=3,
@@ -24,42 +28,115 @@ server = GameServer(server_id=0,
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+def save_game_checkpoint(completed_round: int, round_data: dict, inactive_teams: set):
+    data = {
+        "last_completed_round": completed_round,
+        "rounds": {},
+        "inactive_teams": list(inactive_teams)
+    }
+
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r") as f:
+                existing_data = json.load(f)
+                data["rounds"] = existing_data.get("rounds", {})
+        except json.JSONDecodeError:
+            pass
+
+    data["rounds"][str(completed_round)] = round_data
+    data["last_completed_round"] = completed_round
+
+    temp_file = f"{STATE_FILE}.tmp"
+    with open(temp_file, "w") as f:
+        json.dump(data, f, indent=4)
+    os.replace(temp_file, STATE_FILE)
+
+
+def load_game_checkpoint():
+    if not os.path.exists(STATE_FILE):
+        return 0, {}
+
+    try:
+        with open(STATE_FILE, "r") as f:
+            data = json.load(f)
+
+        last_round = data.get("last_completed_round", -1)
+        rounds_history = data.get("rounds", {})
+        return last_round + 1, rounds_history
+    except (json.JSONDecodeError, KeyError):
+        return 0, {}
+    
 def get_game_server():
     return server
 
-async def start_games(game:GameServer, time_per_round, timeout, penalty):
-        tasks = []
+async def start_games(game: GameServer, time_per_round, timeout, penalty): 
+    start_round_num, rounds_history = load_game_checkpoint()
+
+    active_teams = []
+    inactive_team_ids = set()
+
+    for team in game.teams:
+        if len(team.connected_sockets) > 0:
+            team.team_state = TeamState.PLAYING
+            team.rotation_order = list(team.members)
+            active_teams.append(team)
+
+            team.score = []
+            for r in range(start_round_num):
+                score = rounds_history.get(str(r), {}).get(str(team.id), 0)
+                team.score.append(score)
+        else:
+            team.team_state = TeamState.DONE
+            team.score = [-1]
+            game.scores[team.id] = -1
+            inactive_team_ids.add(team.id)
+
+    if active_teams:
+        for round_num in range(start_round_num, 5):
+            round_tasks = [
+                asyncio.create_task(team.run_round(round_num, time_per_round, timeout, penalty))
+                for team in active_teams
+            ]
+            round_scores = await asyncio.gather(*round_tasks)
+            
+            round_data = {str(team.id): score for team, score in zip(active_teams, round_scores)}
+            print(f"Round {round_num + 1} complete for all teams: {round_data}")
+
+            save_game_checkpoint(round_num, round_data, inactive_team_ids)
+
+            for team in active_teams:
+                await team.announce_to_team({
+                    JSONFields.TYPE: Responses.GAME_STATE_RESPONSE,
+                    JSONFields.GAME_STATE: GameState.ROUND_OVER,
+                    JSONFields.ROUND: round_num + 1,
+                    JSONFields.ROUND_SCORE: round_data[str(team.id)],
+                    JSONFields.TEAM_SCORE: sum(team.score),
+                    JSONFields.TIME: 10
+                })
+            await asyncio.sleep(10)
+            
+        print("All teams finished the game")
+
+    for team in active_teams:
+        team.team_state = TeamState.DONE
+        game.scores[team.id] = sum(team.score)
+        await team.announce_to_team({
+            JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE,
+            JSONFields.TEAM_STATE: TeamState.DONE
+        })
         
-        for team in game.teams:
-            if len(team.connected_sockets) > 0:
-                team.team_state = TeamState.PLAYING
-                task = asyncio.create_task(team.run_game(game.scores,game.max_members_per_team, time_per_round,timeout, penalty))
-                tasks.append(task)
-
-            else:
-                team.team_state = TeamState.DONE
-                team.score =[-1]
-                game.scores[team.id] = -1
-
-        if tasks: 
-            await asyncio.gather(*tasks)
-
-            print("All teams finished the game")        
-
-        game.game_state = GameState.GAME_OVER
-
+    game.game_state = GameState.GAME_OVER
+    top3 = game.rank_teams()
+    
+    for team in game.teams:
+        await team.announce_to_team({
+            JSONFields.TYPE: Responses.GAME_STATE_RESPONSE,
+            JSONFields.GAME_STATE: GameState.GAME_OVER,
+            JSONFields.TEAM_SCORE: team.score,
+            JSONFields.TEAM_RANK: team.rank,
+            JSONFields.TOP3: top3
+        })
         
-        top3 = game.rank_teams()
-
-        for team in game.teams:
-            await team.announce_to_team({
-                JSONFields.TYPE: Responses.GAME_STATE_RESPONSE,
-                JSONFields.GAME_STATE: GameState.GAME_OVER,
-                JSONFields.TEAM_SCORE: team.score,
-                JSONFields.TEAM_RANK: team.rank,
-                JSONFields.TOP3: top3
-            })
-
 
 @app.websocket("/ws")
 async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_game_server)):
