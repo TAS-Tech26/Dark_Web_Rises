@@ -4,6 +4,9 @@ import { GameClient, GamePlay } from './game_client.js';
 const game = new GameClient("ws://127.0.0.1:8000/ws");
 
 // --- DOM OBJECT TARGET CACHING ---
+let activeAdminId = null;
+let adminMonitorInterval = null;
+
 const loginScreen = document.getElementById("login_screen");
 const lobbyScreen = document.getElementById("lobby_screen");
 const gameScreen = document.getElementById("game_screen");
@@ -15,6 +18,9 @@ const activeTurnControls = document.getElementById("active_turn_controls");
 const spectatorMessage = document.getElementById("spectator_message");
 const promptInput = document.getElementById("prompt_input");
 const loginButton = document.getElementById("login_button");
+const adminScreen = document.getElementById("admin_screen");
+const runGameButton = document.getElementById("run_game_button");
+const adminStatusMsg = document.getElementById("admin_status_msg");
 
 let currentTimerInterval = null;
 
@@ -24,7 +30,7 @@ function showScreen(screenElement) {
     lobbyScreen.classList.remove("active");
     gameScreen.classList.remove("active");
     postgameScreen.classList.remove("active");
-    
+    if (adminScreen) adminScreen.classList.remove("active");
     screenElement.classList.add("active");
 }
 
@@ -79,6 +85,35 @@ game.on_connection_error = (err) => {
 game.on_login_success = (userId) => {
     showScreen(lobbyScreen);
     addLog(`Operator successfully verified. ID: ${userId}`);
+};
+
+game.on_admin_login_success = (adminId) => {
+    console.log("=== ADMIN HOOK ACTIVATED ===");
+    console.log("Raw adminId parameter received:", adminId);
+    
+    // 1. If the value is undefined, it means game_client.js read the wrong JSON key.
+    // Let's log 'game' object status to see if it got stored somewhere else:
+    console.log("Current game client state:", game);
+
+    // 2. Assign the true value (or check game.user_id if adminId was misplaced)
+    //    Use ?? so an admin id of 0 isn't treated as missing
+    activeAdminId = adminId ?? game.user_id; 
+    
+    if (activeAdminId === null || activeAdminId === undefined) {
+        console.error("CRITICAL: No valid admin session key found in login packet!");
+        adminStatusMsg.textContent = "Auth Error: Missing Session Key.";
+        adminStatusMsg.style.color = "var(--danger-color)";
+        return; // Don't start polling with bad data
+    }
+
+    showScreen(adminScreen);
+    adminStatusMsg.textContent = "Authorized System Command Access Verified.";
+    adminStatusMsg.style.color = "var(--accent-color)";
+    runGameButton.disabled = false;
+
+    if (adminMonitorInterval) clearInterval(adminMonitorInterval);
+    adminMonitorInterval = setInterval(fetchAdminDashboardTelemetry, 2000);
+    fetchAdminDashboardTelemetry(); 
 };
 
 game.on_logout_success = () => {
@@ -248,11 +283,110 @@ function submitCurrentPrompt() {
     spectatorMessage.textContent = "Transmitting parameters across network layers...";
 }
 
+async function fetchAdminDashboardTelemetry() {
+    // If this prints, it means the polling loop is active but you aren't authenticated as an admin yet
+    if (activeAdminId === null || activeAdminId === undefined) {
+        console.warn("Telemetry Polling: Skipped (activeAdminId is null). Ensure admin login succeeded.");
+        return; 
+    }
+    
+    console.log(`[Telemetry Request] Fetching data with X-Admin-Id: ${activeAdminId}`);
+    
+    try {
+        const response = await fetch("/admin/dashboard", {
+            method: "GET",
+            headers: { 
+                "X-Admin-Id": String(activeAdminId),
+                "Accept": "application/json"
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log("[Telemetry Response] Received payload:", data);
+            renderAdminMonitorGrid(data.teams);
+        } else {
+            console.error(`[Telemetry Error] Server responded with status: ${response.status}`);
+            adminStatusMsg.textContent = `Sync Error: HTTP ${response.status}`;
+            adminStatusMsg.style.color = "var(--danger-color)";
+        }
+    } catch (err) {
+        console.error("[Telemetry Transport Fault] Failed to reach endpoint:", err);
+    }
+}
+
+function renderAdminMonitorGrid(teams) {
+    const grid = document.getElementById("admin_grid_display");
+    if (!grid) {
+        console.error("DOM Error: Element #admin_grid_display not found in webpage.html!");
+        return;
+    }
+    
+    if (!teams || teams.length === 0) {
+        grid.innerHTML = `
+            <div style="grid-column: 1/-1; background: rgba(255,192,0,0.1); border: 1px dashed #ffcc00; padding: 15px; border-radius: 8px; text-align: center;">
+                <p style="color: #ffcc00; font-weight: bold; margin: 0;">Connected to server, but zero game teams exist yet.</p>
+                <p style="color: #aaa; margin: 5px 0 0 0; font-size: 13px;">Have your players log in and initialize sessions.</p>
+            </div>`;
+        return;
+    }
+    
+    grid.innerHTML = teams.map(team => `
+        <div style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); padding: 15px; border-radius: 8px;">
+            <h4 style="margin: 0 0 10px 0; color: var(--accent-color);">${team.name || 'Unnamed Team'}</h4>
+            <p style="margin: 4px 0; font-size: 14px;">State: <strong style="color: #fff;">${team.state}</strong></p>
+            <p style="margin: 4px 0; font-size: 14px;">Players Online: <strong style="color: #fff;">${team.connected_members}</strong></p>
+            <p style="margin: 4px 0; font-size: 14px;">Active Prompter: <span style="font-family: monospace;">${team.current_turn_player || 'None'}</span></p>
+            <p style="margin: 4px 0; font-size: 14px;">Round Stage: ${team.round} / 5</p>
+            <p style="margin: 4px 0; font-size: 14px;">Team Score: <strong>${team.score} pts</strong></p>
+            <p style="margin: 4px 0; font-size: 14px;">Status: ${team.prompt_submitted ? "✅ Prompt Injected" : "⏳ Awaiting Input"}</p>
+        </div>
+    `).join('');
+}
+
+async function adminTriggerRunGame() {
+    adminStatusMsg.textContent = "Transmitting initialization vector...";
+    adminStatusMsg.style.color = "var(--text-muted)";
+    
+    try {
+        const response = await fetch("/admin/rungame", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Admin-Id": activeAdminId // Authorization context header criteria
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            adminStatusMsg.textContent = "Match ignition successful! Global countdown active.";
+            adminStatusMsg.style.color = "var(--accent-color)";
+            runGameButton.disabled = true;
+        } else {
+            adminStatusMsg.textContent = `Execution Denied: ${data.detail || "Server logic halt."}`;
+            adminStatusMsg.style.color = "var(--danger-color)";
+        }
+    } catch (err) {
+        adminStatusMsg.textContent = "Network Transport Fault: Check FastAPI console.";
+        adminStatusMsg.style.color = "var(--danger-color)";
+        console.error(err);
+    }
+}
+runGameButton.addEventListener("click", () => {
+    adminTriggerRunGame();
+});
+
+
 // Event Subscriptions
 document.getElementById("login_button").addEventListener("click", () => {
     const user = document.getElementById("username_input").value.trim();
     const pass = document.getElementById("password_input").value;
+    
     if (user && pass) {
+        // Admin accounts authenticate through the same login flow as players;
+        // the backend identifies them via server-side admin credentials and
+        // responds with an admin_response, which is already handled below.
         game.login(user, pass);
     } else {
         alert("Credentials field inputs cannot reside empty.");

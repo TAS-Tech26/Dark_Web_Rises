@@ -97,6 +97,7 @@ class GameClient {
         this.on_game_countdown = null;
         this.on_round_over = null;
         this.on_game_over = null;
+        this.on_admin_login_success = null;
 
         // Core Network Pipeline Lifecycle Events
         this.socket.onopen = () => {
@@ -112,8 +113,21 @@ class GameClient {
         };
 
         this.socket.onmessage = (event) => { 
+            console.log("RAW INCOMING WEBSOCKET PACKET:", event.data);
             const data = JSON.parse(event.data);
-
+            if (data[JSONFields.TYPE] === "admin_response") {
+                if (data[JSONFields.AUTHORISED] === Login.ACCEPTED) {
+                    // Use ?? (nullish coalescing) instead of || so an admin id of 0 is preserved
+                    this.user_id = data["admin_id"] ?? data[JSONFields.USER_ID] ?? data["id"];
+                    
+                    console.log("Admin parsed session key ID:", this.user_id);
+                    
+                    if (this.on_admin_login_success) this.on_admin_login_success(this.user_id);
+                } else {
+                    if (this.on_login_failed) this.on_login_failed(data[JSONFields.STATUS]);
+                }
+                return; // Halt cascade processing
+            }
             if (data[JSONFields.TYPE] === Responses.LOGIN_RESPONSE) {
                 if (data[JSONFields.AUTHORISED] === Login.ACCEPTED) {
                     this.user_id = data[JSONFields.USER_ID];
@@ -197,6 +211,13 @@ class GameClient {
             [JSONFields.TYPE]: Login.LOGIN,
             [JSONFields.USERNAME]: username,
             [JSONFields.PASSWORD]: password
+        }));
+    }
+    admin_login(password) {
+        console.log("Transmitting secure admin block over socket pipeline...");
+        this.socket.send(JSON.stringify({
+            "type": "admin_login",
+            "password": password
         }));
     }
 

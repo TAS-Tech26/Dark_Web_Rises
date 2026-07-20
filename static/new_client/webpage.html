@@ -264,6 +264,29 @@
             <button id="login_button" disabled>Checking System Hook...</button>
         </div>
 
+        <div id="admin_screen" class="screen">
+            <div class="game-header">
+                <h2>Administrative Overlord Matrix</h2>
+                <button id="admin_logout_button" class="btn-danger">Terminate Session</button>
+            </div>
+            <div class="panel" style="margin-top: 20px;">
+                <h3>Live Matrix Grid Monitor</h3>
+                <div id="admin_grid_display" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-top: 15px;">
+                    <!-- Dynamic team telemetry matrices inject here -->
+                </div>
+            </div>
+            <div class="panel" style="margin-top: 20px; text-align: center; padding: 40px;">
+                <h3>Match State Initialization Controls</h3>
+                <p style="color: var(--text-muted); margin-bottom: 25px;">
+                    Force execution environment countdown sequence across all initialized teams.
+                </p>
+                <button id="run_game_button" style="font-size: 20px; padding: 15px 40px; background-color: #ff3333; color: white;">
+                    🚀 Run Game Match
+                </button>
+                <p id="admin_status_msg" style="margin-top: 15px; font-style: italic; color: var(--accent-color);"></p>
+            </div>
+        </div>
+
         <div id="lobby_screen" class="screen">
             <div class="game-header">
                 <h2>Operations Room</h2>

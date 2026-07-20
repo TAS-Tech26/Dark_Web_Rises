@@ -23,6 +23,8 @@ class JSONFields(StrEnum):
     TEAM_SCORE = "team_score"
     TEAM_RANK = "team_rank"
     TOP3 = "top3"
+    ADMIN = "admin"
+    ADMIN_ID = "admin_id"
 
 class Login(StrEnum):
     LOGIN = "login"
@@ -41,6 +43,7 @@ class Responses(StrEnum):
     GAME_STATE_RESPONSE = "game_state_response"
     TEAM_STATE_RESPONSE = "team_state_response"
     GAMEPLAY_RESPONSE = "gameplay_response"
+    ADMIN_RESPONSE = "admin_response"
     
 
 class GameState(IntEnum):
@@ -68,5 +71,3 @@ class GamePlay(IntEnum):
 
     INVALID_PROMPT = 6
     OUT_OF_CHANCES = 7
-
-

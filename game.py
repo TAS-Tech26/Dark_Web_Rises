@@ -1,6 +1,6 @@
 import time
 import asyncio
-from fastapi import FastAPI, WebSocket, Depends, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, Depends, WebSocketDisconnect, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 from enumerations import JSONFields, Login, Responses, GameState, TeamState, GamePlay
 from models.server import GameServer
@@ -8,13 +8,16 @@ from models.server import GameServer
 server = GameServer(server_id=0,
                     max_teams=3,
                     max_members_per_team=4,
-                    team_names=["name1", "name2", "name3"],
-                    user_data={ 
+                    team_names=["name1", "name2", "name3","name4","name5","name6"],
+                    player_data={ 
                         0:["user1", "password1", 0],
                         1:["user2", "password2", 0],
                         2:["user3", "password3", 2],
                         3:["user4", "password4", 0],
-                        4:["user5", "password5", 0]
+                        4:["user5", "password5", 0]},
+                    admin_data = {
+                        0:["admin1","admin_password1"],
+                        1:["admin2","admin_password2"]
                     })
 
 
@@ -63,48 +66,57 @@ async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_gam
     await websocket.accept()
     current_user_id = None
     current_team_id = None
+    current_client_type = None # Track whether this is an admin or player connection
+    
     try:
         while True:
             data = await websocket.receive_json() 
 
-            """ 
-                data format:
-                TYPE: <some type (LOGIN/GAMEPLAY etc)>
-                <required fields under that type>
-            """
-
-            #login check
+            # Login routing
             if data.get(JSONFields.TYPE) == Login.LOGIN:
                 response = game.check_login(data, websocket)
-
-                if response.get(JSONFields.AUTHORISED) == Login.ACCEPTED:
-                    current_user_id = response.get(JSONFields.USER_ID)
-                    current_team_id = game.users[current_user_id].team_id
-                        
-                    await websocket.send_json(response)
-
-                    await game.teams[current_team_id].announce_to_team({JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE,
-                                                                  JSONFields.TEAM_STATE: TeamState.JOINED,
-                                                                  JSONFields.USERNAME: [game.users[uid].username for uid in game.connected_teams[current_team_id]]})
-                    
+                
+                if response.get(JSONFields.TYPE) == Responses.ADMIN_RESPONSE:
+                    if response.get(JSONFields.AUTHORISED) == Login.ACCEPTED:
+                        current_user_id = response.get(JSONFields.ADMIN_ID)
+                        current_client_type = "admin"
+                        await websocket.send_json(response)
+                    else:
+                        await websocket.send_json(response)
                 else:
-                    await websocket.send_json(response)
+                    if response.get(JSONFields.AUTHORISED) == Login.ACCEPTED:
+                        current_user_id = response.get(JSONFields.USER_ID)
+                        current_team_id = game.players[current_user_id].team_id
+                        current_client_type = "player"
+                            
+                        await websocket.send_json(response)
 
-            elif current_user_id != None:
-                #logout check
+                        await game.teams[current_team_id].announce_to_team({
+                            JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE,
+                            JSONFields.TEAM_STATE: TeamState.JOINED,
+                            JSONFields.USERNAME: [game.players[uid].username for uid in game.connected_teams[current_team_id]]
+                        })
+                    else:
+                        await websocket.send_json(response)
+
+            # Authenticated Session Management Loop
+            elif current_user_id is not None:
                 if data.get(JSONFields.TYPE) == Login.LOGOUT:
-                    response = game.check_logout(user_id=current_user_id)
-
+                    response = game.check_logout(id=current_user_id, client_type=current_client_type)
                     await websocket.send_json(response)
 
-                    await game.teams[current_team_id].announce_to_team({JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE,
-                                                                  JSONFields.TEAM_STATE: TeamState.LEFT,
-                                                                  JSONFields.USERNAME: [game.users[uid].username for uid in game.connected_teams[current_team_id]]})
+                    if current_client_type == "player" and response.get(JSONFields.AUTHORISED) == Login.ACCEPTED:
+                        await game.teams[current_team_id].announce_to_team({
+                            JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE,
+                            JSONFields.TEAM_STATE: TeamState.LEFT,
+                            JSONFields.USERNAME: [game.players[uid].username for uid in game.connected_teams[current_team_id]]
+                        })
 
                     current_user_id = None
                     current_team_id = None
+                    current_client_type = None
 
-                elif game.game_state == GameState.GAME_RUNNING or game.game_state == GameState.COUNTDOWN:
+                elif current_client_type == "player" and (game.game_state == GameState.GAME_RUNNING or game.game_state == GameState.COUNTDOWN):
                     if data.get(JSONFields.TYPE) == GamePlay.PROMPT_OUT:
                         if current_user_id == game.teams[current_team_id].current_turn_uid:
                             await game.teams[current_team_id].input_queue.put(data)
@@ -113,30 +125,55 @@ async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_gam
             
     except WebSocketDisconnect:
         if current_user_id is not None:
-            if current_user_id in game.connected_users:
-                game.connected_users.remove(current_user_id)
-                game.connected_sockets.pop(current_user_id,None)
+            if current_client_type == "admin":
+                game.connected_admins.discard(current_user_id)
+                game.connected_sockets.pop(current_user_id, None)
+            else:
+                if current_user_id in game.connected_players:
+                    game.connected_players.remove(current_user_id)
+                    game.connected_sockets.pop(current_user_id, None)
 
-            if current_user_id in game.connected_teams[current_team_id]:
-                game.connected_teams[current_team_id].remove(current_user_id)
-                game.teams[current_team_id].connected_sockets.pop(current_user_id,None)
+                if current_team_id is not None and current_user_id in game.connected_teams[current_team_id]:
+                    game.connected_teams[current_team_id].remove(current_user_id)
+                    game.teams[current_team_id].connected_sockets.pop(current_user_id, None)
 
-            await game.teams[current_team_id].announce_to_team({JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE,
-                                                          JSONFields.TEAM_STATE: TeamState.LEFT,
-                                                          JSONFields.USERNAME: [game.users[uid].username for uid in game.connected_teams[current_team_id]]})
+                    await game.teams[current_team_id].announce_to_team({
+                        JSONFields.TYPE: Responses.TEAM_STATE_RESPONSE,
+                        JSONFields.TEAM_STATE: TeamState.LEFT,
+                        JSONFields.USERNAME: [game.players[uid].username for uid in game.connected_teams[current_team_id]]
+                    })
 
             current_user_id = None
             current_team_id = None
-
+            current_client_type = None
             
         print("client disconnected")
 
+def verify_admin_session(x_admin_id: str = Header(None, alias="X-Admin-Id")):
+    """Dependency to verify that the HTTP request is from an authenticated active admin."""
+    if not x_admin_id:
+        raise HTTPException(status_code=401, detail="Missing administrative credentials.")
+    
+    try:
+        admin_id = int(x_admin_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid administrator ID format.")
+        
+    if admin_id not in server.connected_admins:
+        raise HTTPException(status_code=403, detail="Unauthorized: Admin session not found or active.")
+    
+    return admin_id
+
 @app.post("/admin/rungame")
-async def force_start_game(game: GameServer = Depends(get_game_server)):
+async def force_start_game(admin_id: int = Depends(verify_admin_session), game: GameServer = Depends(get_game_server)):
+    # Block starting if the game is already out of the login phase
+    if game.game_state != GameState.LOGIN_PERIOD:
+        raise HTTPException(status_code=400, detail="Game has already started or concluded.")
+
     game.game_state = GameState.COUNTDOWN 
     game.countdown_end_time = time.time() + 5
 
-    await game.announce_to_users({
+    await game.announce_to_players({
         JSONFields.TYPE: Responses.GAME_STATE_RESPONSE,
         JSONFields.GAME_STATE: GameState.COUNTDOWN,
         JSONFields.TIME: 5 
@@ -144,10 +181,34 @@ async def force_start_game(game: GameServer = Depends(get_game_server)):
 
     await asyncio.sleep(5)
     game.game_state = GameState.GAME_RUNNING
-    await game.announce_to_users({
+    await game.announce_to_players({
         JSONFields.TYPE: Responses.GAME_STATE_RESPONSE,
         JSONFields.GAME_STATE: GameState.GAME_RUNNING
     })
-    await start_games(game,time_per_round=90, timeout=30, penalty=5)
-    return {"message": "game running"}
+    
+    # Run the game loops in the background so the HTTP response doesn't hang for minutes
+    asyncio.create_task(start_games(game, time_per_round=90, timeout=30, penalty=5))
+    
+    return {"status": "success", "message": "Game countdown initiated successfully."}
 #changes have been made
+
+@app.get("/admin/dashboard")
+async def get_global_dashboard(admin_id: int = Depends(verify_admin_session), game: GameServer = Depends(get_game_server)):
+    """Exposes a live overview of all teams and player metrics to authenticated admins."""
+    return {
+        "game_state": game.game_state,
+        "total_connected_players": len(game.connected_players),
+        "teams": [
+            {
+                "id": team.id,
+                "name": team.team_name,
+                "state": team.team_state,
+                "score": sum(team.score) if isinstance(team.score, list) else team.score,
+                "connected_members": len(team.connected_sockets),
+                "round": team.round + 1,
+                "current_turn_player": game.players[team.current_turn_uid].username if team.current_turn_uid in game.players else "None",
+                "prompt_submitted": team.prompt_submitted
+            }
+            for team in game.teams
+        ]
+    }
