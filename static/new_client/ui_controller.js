@@ -304,7 +304,7 @@ async function fetchAdminDashboardTelemetry() {
         if (response.ok) {
             const data = await response.json();
             console.log("[Telemetry Response] Received payload:", data);
-            renderAdminMonitorGrid(data.teams);
+            renderAdminMonitorGrid(data);
         } else {
             console.error(`[Telemetry Error] Server responded with status: ${response.status}`);
             adminStatusMsg.textContent = `Sync Error: HTTP ${response.status}`;
@@ -314,34 +314,23 @@ async function fetchAdminDashboardTelemetry() {
         console.error("[Telemetry Transport Fault] Failed to reach endpoint:", err);
     }
 }
+function renderAdminMonitorGrid(data) {
+    const noTeamsMsg = document.getElementById("admin_no_teams_msg");
+    const statCards = document.querySelectorAll("#admin_grid_display .panel");
+    if (!data || data.total_teams === 0) {
+        if (noTeamsMsg) noTeamsMsg.style.display = "block";
+        statCards.forEach(card => card.style.display = "none");
+        return;
+    }
+    if (noTeamsMsg) noTeamsMsg.style.display = "none";
+    statCards.forEach(card => card.style.display = "");
+    document.getElementById("stat_connected_teams").textContent = data.connected_teams;
+    document.getElementById("stat_total_teams").textContent = data.total_teams;
+    document.getElementById("stat_players_online").textContent = data.total_connected_players;
+    document.getElementById("stat_current_round").textContent = data.current_round;
+    document.getElementById("stat_total_rounds").textContent = data.total_rounds;
+    document.getElementById("stat_game_state").textContent = data.game_state;
 
-function renderAdminMonitorGrid(teams) {
-    const grid = document.getElementById("admin_grid_display");
-    if (!grid) {
-        console.error("DOM Error: Element #admin_grid_display not found in webpage.html!");
-        return;
-    }
-    
-    if (!teams || teams.length === 0) {
-        grid.innerHTML = `
-            <div style="grid-column: 1/-1; background: rgba(255,192,0,0.1); border: 1px dashed #ffcc00; padding: 15px; border-radius: 8px; text-align: center;">
-                <p style="color: #ffcc00; font-weight: bold; margin: 0;">Connected to server, but zero game teams exist yet.</p>
-                <p style="color: #aaa; margin: 5px 0 0 0; font-size: 13px;">Have your players log in and initialize sessions.</p>
-            </div>`;
-        return;
-    }
-    
-    grid.innerHTML = teams.map(team => `
-        <div style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); padding: 15px; border-radius: 8px;">
-            <h4 style="margin: 0 0 10px 0; color: var(--accent-color);">${team.name || 'Unnamed Team'}</h4>
-            <p style="margin: 4px 0; font-size: 14px;">State: <strong style="color: #fff;">${team.state}</strong></p>
-            <p style="margin: 4px 0; font-size: 14px;">Players Online: <strong style="color: #fff;">${team.connected_members}</strong></p>
-            <p style="margin: 4px 0; font-size: 14px;">Active Prompter: <span style="font-family: monospace;">${team.current_turn_player || 'None'}</span></p>
-            <p style="margin: 4px 0; font-size: 14px;">Round Stage: ${team.round} / 5</p>
-            <p style="margin: 4px 0; font-size: 14px;">Team Score: <strong>${team.score} pts</strong></p>
-            <p style="margin: 4px 0; font-size: 14px;">Status: ${team.prompt_submitted ? "✅ Prompt Injected" : "⏳ Awaiting Input"}</p>
-        </div>
-    `).join('');
 }
 
 async function adminTriggerRunGame() {

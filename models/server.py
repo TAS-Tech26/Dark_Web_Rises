@@ -14,6 +14,8 @@ class GameServer:
         self.connected_admins = set()
         self.connected_teams = [[] for _ in range(max_teams)]
         self.connected_sockets = {}
+        self.current_round = 0
+        self.total_rounds = 5
 
         self.countdown_end_time = 0.0
         self.scores = {}

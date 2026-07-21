@@ -93,6 +93,7 @@ async def start_games(game: GameServer, time_per_round, timeout, penalty):
 
     if active_teams:
         for round_num in range(start_round_num, 5):
+            game.current_round = round_num+1
             round_tasks = [
                 asyncio.create_task(team.run_round(round_num, time_per_round, timeout, penalty))
                 for team in active_teams
@@ -136,7 +137,6 @@ async def start_games(game: GameServer, time_per_round, timeout, penalty):
             JSONFields.TEAM_RANK: team.rank,
             JSONFields.TOP3: top3
         })
-        
 
 @app.websocket("/ws")
 async def game_endpoint(websocket: WebSocket, game: GameServer = Depends(get_game_server)):
@@ -271,21 +271,12 @@ async def force_start_game(admin_id: int = Depends(verify_admin_session), game: 
 
 @app.get("/admin/dashboard")
 async def get_global_dashboard(admin_id: int = Depends(verify_admin_session), game: GameServer = Depends(get_game_server)):
-    """Exposes a live overview of all teams and player metrics to authenticated admins."""
+    connected_teams = sum(1 for team in game.teams if len(team.connected_sockets) > 0)
     return {
         "game_state": game.game_state,
         "total_connected_players": len(game.connected_players),
-        "teams": [
-            {
-                "id": team.id,
-                "name": team.team_name,
-                "state": team.team_state,
-                "score": sum(team.score) if isinstance(team.score, list) else team.score,
-                "connected_members": len(team.connected_sockets),
-                "round": team.round + 1,
-                "current_turn_player": game.players[team.current_turn_uid].username if team.current_turn_uid in game.players else "None",
-                "prompt_submitted": team.prompt_submitted
-            }
-            for team in game.teams
-        ]
+        "connected_teams": connected_teams,
+        "total_teams": len(game.teams),
+        "current_round": game.current_round,
+        "total_rounds": game.total_rounds
     }
