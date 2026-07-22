@@ -2,6 +2,7 @@ import time
 import asyncio
 from fastapi import FastAPI, WebSocket, Depends, WebSocketDisconnect, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from enumerations import JSONFields, Login, Responses, GameState, TeamState, GamePlay
 from models.server import GameServer
 import json
@@ -280,3 +281,7 @@ async def get_global_dashboard(admin_id: int = Depends(verify_admin_session), ga
         "current_round": game.current_round,
         "total_rounds": game.total_rounds
     }
+
+@app.get("/")
+async def read_root():
+    return FileResponse("static/new_client/webpage.html")
