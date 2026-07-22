@@ -51,12 +51,12 @@ def load_image(img_input):
     if isinstance(img_input, str) and img_input.startswith("data:image"):
         img_input = img_input.split("base64,")[1]
         return Image.open(BytesIO(base64.b64decode(img_input)))
-    elif isinstance(img_input, str) and img_input.startswith("http://127.0.0.1"):
-        # load from file directly instead of HTTP
-        path = img_input.replace("http://127.0.0.1:8000/", "")
+    elif isinstance(img_input, str) and img_input.startswith("/static/"):
+        path = img_input.lstrip("/")
         return Image.open(path)
     else:
         return Image.open(img_input)
+
     
 '''async def get_image(prompt):
     if prompt == "default_prompt":
@@ -99,28 +99,24 @@ async def get_image(prompt):
         
         valid_extensions = (".png", ".jpeg", ".jpg", ".gif")
         image_files = [f for f in all_files if f.lower().endswith(valid_extensions)]
-
+ 
         if not image_files:
             print("no images in folder")
             return "/static/default.png"
-
+ 
         random_filename = random.choice(image_files)
-        return f"http://127.0.0.1:8000/static/images/{random_filename}"
+        return f"/static/images/{random_filename}"
         
     else:
-        # 1. Safely encode the user prompt for a URL path
         encoded_prompt = urllib.parse.quote(prompt)
         
-        # 2. Build the Pollinations.ai Flux URL
         url = f"https://image.pollinations.ai/p/{encoded_prompt}?model=flux&width=1024&height=1024"
         
         try:
-            # 3. Async call to fetch the image bytes
             async with httpx.AsyncClient() as client:
                 response = await client.get(url, timeout=30.0)
                 
                 if response.status_code == 200:
-                    # 4. Convert the raw bytes to a base64 string
                     image_base64 = base64.b64encode(response.content).decode()
                     return f"data:image/jpeg;base64,{image_base64}"
                 else:
@@ -130,6 +126,7 @@ async def get_image(prompt):
         except Exception as e:
             print(f"Failed to fetch image from Pollinations: {e}")
             return "/static/default.png"
+
 
 async def compare_image(penalty, original, new):
     image1 = preprocess(load_image(original)).unsqueeze(0)

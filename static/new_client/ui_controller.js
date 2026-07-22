@@ -1,7 +1,8 @@
 import { GameClient, GamePlay } from './game_client.js';
 
 // ** Target endpoint matches your Uvicorn launch configuration port precisely **
-const game = new GameClient("ws://127.0.0.1:8000/ws");
+const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+const game = new GameClient(`${wsProtocol}//${window.location.host}/ws`);
 
 // --- DOM OBJECT TARGET CACHING ---
 let activeAdminId = null;
@@ -314,23 +315,29 @@ async function fetchAdminDashboardTelemetry() {
         console.error("[Telemetry Transport Fault] Failed to reach endpoint:", err);
     }
 }
+
 function renderAdminMonitorGrid(data) {
     const noTeamsMsg = document.getElementById("admin_no_teams_msg");
     const statCards = document.querySelectorAll("#admin_grid_display .panel");
+
     if (!data || data.total_teams === 0) {
         if (noTeamsMsg) noTeamsMsg.style.display = "block";
         statCards.forEach(card => card.style.display = "none");
         return;
     }
+
     if (noTeamsMsg) noTeamsMsg.style.display = "none";
     statCards.forEach(card => card.style.display = "");
+
+    // Rounds are synchronized across all teams, so there's a single current_round
+    // rather than a per-team one. This summary is all an admin needs to decide
+    // whether to start the game and estimate how much longer it has left.
     document.getElementById("stat_connected_teams").textContent = data.connected_teams;
     document.getElementById("stat_total_teams").textContent = data.total_teams;
     document.getElementById("stat_players_online").textContent = data.total_connected_players;
     document.getElementById("stat_current_round").textContent = data.current_round;
     document.getElementById("stat_total_rounds").textContent = data.total_rounds;
     document.getElementById("stat_game_state").textContent = data.game_state;
-
 }
 
 async function adminTriggerRunGame() {
