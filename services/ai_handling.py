@@ -37,8 +37,10 @@ COMMON_WORDS = {
     "my", "your", "his", "her", "its", "our", "their",
     "what", "who", "where", "when", "how", "why"
 }
-
-image_comparator, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_s34b_b79k')
+image_comparator, preprocess_train, preprocess_val = open_clip.create_model_and_transforms(
+    'RN50', 
+    pretrained='openai' # or 'laion400m_e32'
+)
 image_comparator.eval()
 custom_timeout = httpx.Timeout(60.0, connect=10.0, read=None, write=20.0)
 imagegen_client = AsyncInferenceClient(
