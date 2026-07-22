@@ -10,6 +10,7 @@ from huggingface_hub import AsyncInferenceClient
 from io import BytesIO
 import base64
 import open_clip
+import numpy as np
 from PIL import Image
 import torch
 import re
@@ -22,6 +23,10 @@ load_dotenv()
 HF_TOKEN = os.getenv("HF_TOKEN")
 if not HF_TOKEN:
     raise RuntimeError("System configuration error: HF_TOKEN missing from environment.")
+
+
+HF_API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/openai/clip-vit-base-patch32"
+HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
 
 nltk.download('words', quiet=True)
 english_words = set(w.lower() for w in words.words())
@@ -37,12 +42,12 @@ COMMON_WORDS = {
     "my", "your", "his", "her", "its", "our", "their",
     "what", "who", "where", "when", "how", "why"
 }
-image_comparator, preprocess_train, preprocess_val = open_clip.create_model_and_transforms(
+'''image_comparator, preprocess_train, preprocess_val = open_clip.create_model_and_transforms(
     'RN50', 
     pretrained='openai' # or 'laion400m_e32'
 )
 image_comparator.eval()
-gc.collect()
+gc.collect()'''
 custom_timeout = httpx.Timeout(60.0, connect=10.0, read=None, write=20.0)
 imagegen_client = AsyncInferenceClient(
         model="stabilityai/stable-diffusion-xl-base-1.0",  # Free tier friendly
@@ -50,16 +55,38 @@ imagegen_client = AsyncInferenceClient(
         timeout=custom_timeout
     )
 
-def load_image(img_input):
+
+
+def load_image_bytes(img_input) -> bytes:
+    """Loads image and converts it directly to bytes for HF API transmission."""
     if isinstance(img_input, str) and img_input.startswith("data:image"):
         img_input = img_input.split("base64,")[1]
-        return Image.open(BytesIO(base64.b64decode(img_input)))
+        return base64.b64decode(img_input)
     elif isinstance(img_input, str) and img_input.startswith("/static/"):
         path = img_input.lstrip("/")
-        return Image.open(path)
+        with open(path, "rb") as f:
+            return f.read()
+    elif isinstance(img_input, Image.Image):
+        buf = BytesIO()
+        img_input.save(buf, format="PNG")
+        return buf.getvalue()
     else:
-        return Image.open(img_input)
+        with open(img_input, "rb") as f:
+            return f.read()
 
+
+async def get_image_embedding(
+    client: httpx.AsyncClient, img_bytes: bytes
+) -> np.ndarray:
+    """Calls HF Inference API to get feature embeddings for an image."""
+    response = await client.post(HF_API_URL, headers=HEADERS, data=img_bytes)
+
+    if response.status_code != 200:
+        raise Exception(f"HF API Error ({response.status_code}): {response.text}")
+
+    # API returns vector embedding array
+    embedding = np.array(response.json())
+    return embedding
     
 '''async def get_image(prompt):
     if prompt == "default_prompt":
@@ -132,17 +159,23 @@ async def get_image(prompt):
 
 
 async def compare_image(penalty, original, new):
-    image1 = preprocess(load_image(original)).unsqueeze(0)
-    image2 = preprocess(load_image(new)).unsqueeze(0)
-    
-    with torch.no_grad(), torch.amp.autocast('cpu'):
-        feat1 = image_comparator.encode_image(image1)
-        feat2 = image_comparator.encode_image(image2)
-        feat1 /= feat1.norm(dim=-1, keepdim=True)
-        feat2 /= feat2.norm(dim=-1, keepdim=True)
-        similarity = (feat1 @ feat2.T).item()
-    
-    sim_clipped = max(0, min(similarity, 1))
+    img1_bytes = load_image_bytes(original)
+    img2_bytes = load_image_bytes(new)
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        # Get embeddings from HF Serverless API
+        feat1 = await get_image_embedding(client, img1_bytes)
+        feat2 = await get_image_embedding(client, img2_bytes)
+
+    # L2 Normalize vectors (Equivalent to: feat /= feat.norm(dim=-1, keepdim=True))
+    feat1 = feat1 / np.linalg.norm(feat1)
+    feat2 = feat2 / np.linalg.norm(feat2)
+
+    # Cosine Similarity (Equivalent to: (feat1 @ feat2.T).item())
+    similarity = float(np.dot(feat1, feat2))
+
+    # Clipping and score calculation identical to your original formula
+    sim_clipped = max(0.0, min(similarity, 1.0))
     return round((sim_clipped * 100) - penalty, 2)
 
 def classify_prompt(prompt):
