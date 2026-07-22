@@ -42,6 +42,7 @@ image_comparator, preprocess_train, preprocess_val = open_clip.create_model_and_
     pretrained='openai' # or 'laion400m_e32'
 )
 image_comparator.eval()
+gc.collect()
 custom_timeout = httpx.Timeout(60.0, connect=10.0, read=None, write=20.0)
 imagegen_client = AsyncInferenceClient(
         model="stabilityai/stable-diffusion-xl-base-1.0",  # Free tier friendly
