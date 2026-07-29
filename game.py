@@ -1,25 +1,33 @@
 import time
 import asyncio
+
 from fastapi import FastAPI, WebSocket, Depends, WebSocketDisconnect, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+
+from supabase import create_client, Client
+
 from enumerations import JSONFields, Login, Responses, GameState, TeamState, GamePlay
 from models.server import GameServer
+from reader import generate_team_dictionary
+
 import json
 import os
 
+
 STATE_FILE = "game_state.json"
+
+supabase_url: str = os.environ.get("SUPABASE_URL")
+supabase_key: str = os.environ.get("SUPABASE_KEY")
+supabase: Client = create_client(supabase_url, supabase_key)
+
+player_data, team_count = generate_team_dictionary(supabase)
 
 server = GameServer(server_id=0,
                     max_teams=3,
                     max_members_per_team=4,
                     team_names=["name1", "name2", "name3","name4","name5","name6"],
-                    player_data={ 
-                        0:["user1", "password1", 0],
-                        1:["user2", "password2", 0],
-                        2:["user3", "password3", 2],
-                        3:["user4", "password4", 0],
-                        4:["user5", "password5", 0]},
+                    player_data=player_data,
                     admin_data = {
                         0:["admin1","admin_password1"],
                         1:["admin2","admin_password2"]
