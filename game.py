@@ -297,6 +297,7 @@ async def get_global_dashboard(admin_id: int = Depends(verify_admin_session), ga
     return {
         "game_state": game.game_state,
         "total_connected_players": len(game.connected_players),
+        "team_names":game.team_names,
         "connected_teams": connected_teams,
         "total_teams": len(game.teams),
         "current_round": game.current_round,
