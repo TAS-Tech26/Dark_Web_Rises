@@ -9,32 +9,45 @@ from supabase import create_client, Client
 
 from enumerations import JSONFields, Login, Responses, GameState, TeamState, GamePlay
 from models.server import GameServer
-from reader import generate_team_dictionary
+#from reader import generate_team_dictionary
 
 import json
 import os
+from fastapi.middleware.cors import CORSMiddleware
 
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8080", "https://id-preview--76b9f65f-7092-4b6e-8af6-df601bbc7578.lovable.app"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 STATE_FILE = "game_state.json"
-
+'''
 supabase_url: str = os.environ.get("SUPABASE_URL")
 supabase_key: str = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(supabase_url, supabase_key)
 
 player_data, team_count = generate_team_dictionary(supabase)
+'''
 
 server = GameServer(server_id=0,
                     max_teams=3,
                     max_members_per_team=4,
                     team_names=["name1", "name2", "name3","name4","name5","name6"],
-                    player_data=player_data,
+                    player_data={ 
+                        0:["user1", "password1", 0],
+                        1:["user2", "password2", 0],
+                        2:["user3", "password3", 2],
+                        3:["user4", "password4", 0],
+                        4:["user5", "password5", 0]},
                     admin_data = {
                         0:["admin1","admin_password1"],
                         1:["admin2","admin_password2"]
                     })
 
-
-app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 def save_game_checkpoint(completed_round: int, round_data: dict, inactive_teams: set):
