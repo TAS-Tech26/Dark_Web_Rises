@@ -264,6 +264,19 @@ class GameServer:
             # Reported distinctly so the UI can say "locked, try again in Ns"
             # instead of "wrong password" -- attendees otherwise keep
             # retrying, extending the lockout.
+            #
+            # The frame type must match the *account* type. A locked-out admin
+            # used to receive a login_response, which the admin client ignores
+            # entirely (it only listens for admin_response) -- so the screen
+            # showed nothing at all and the lockout was invisible.
+            if key in self._username_to_admin_id:
+                return {
+                    JSONFields.TYPE: Responses.ADMIN_RESPONSE,
+                    JSONFields.STATUS: NameStatus.LOCKED,
+                    JSONFields.AUTHORISED: Login.LOCKED,
+                    JSONFields.ADMIN_ID: None,
+                    JSONFields.RETRY_AFTER: round(remaining, 1),
+                }
             return self._denied_response(
                 status=NameStatus.LOCKED, authorised=Login.LOCKED, retry_after=remaining
             )

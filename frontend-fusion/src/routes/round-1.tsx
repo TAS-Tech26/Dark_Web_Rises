@@ -7,7 +7,7 @@ import { DwrTextarea, Field } from "@/components/dwr/Form";
 import { ImageViewer } from "@/components/dwr/ImageViewer";
 import { Send, Loader2, Sparkles, Users, Clock } from "lucide-react";
 import { useGame, useSecondsUntil } from "@/lib/game-connection";
-import { GameState, TOTAL_ROUNDS, TeamState } from "@/lib/dwr-protocol";
+import { GameState, TeamState } from "@/lib/dwr-protocol";
 import { toImageSrc } from "@/lib/image-src";
 
 export const Route = createFileRoute("/round-1")({
@@ -114,7 +114,7 @@ function Round1() {
                   ROUND
                 </div>
                 <div className="mt-1 font-mono text-lg font-bold text-foreground">
-                  {roundLabel} / {TOTAL_ROUNDS}
+                  {roundLabel} / {game.totalRounds}
                 </div>
               </div>
 

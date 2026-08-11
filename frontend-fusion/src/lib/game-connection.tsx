@@ -18,6 +18,7 @@ import {
   TeamState,
   getApiBaseUrl,
   getWebSocketUrl,
+  TOTAL_ROUNDS,
   type ServerMessage,
 } from "./dwr-protocol";
 
@@ -67,6 +68,10 @@ export type GameSnapshot = {
 
   /** scoring */
   currentRound: number;
+  /** Authoritative round count from the server. The backend drives its loop
+   * from GameServer.total_rounds and now sends it on the wire, so the UI no
+   * longer has to hardcode 5 and hope the two agree. */
+  totalRounds: number;
   rounds: RoundRecord[];
   lastRoundScore: number | null;
   teamScore: number | null;
@@ -103,6 +108,7 @@ const initialSnapshot: GameSnapshot = {
   attemptsLeft: 3,
 
   currentRound: 0,
+  totalRounds: TOTAL_ROUNDS,
   rounds: [],
   lastRoundScore: null,
   teamScore: null,
@@ -123,13 +129,42 @@ type GameContextValue = GameSnapshot & {
   adminDashboard: () => Promise<AdminDashboard | null>;
 };
 
+/** Shape of one team row from /admin/dashboard. Exported for reference;
+ * admin.dashboard.tsx intentionally uses a looser local type. */
+export type AdminDashboardTeam = {
+  team_id: number;
+  team_name: string;
+  total_members: number;
+  assigned_members: number;
+  connected_members: number;
+  score: number;
+  round_scores: number[];
+  rank: number | null;
+  members: string[];
+};
+
+/** Circuit-breaker state for one image provider. */
+export type ProviderStatus = {
+  provider: string;
+  state: "closed" | "open" | "half_open";
+  consecutive_failures: number;
+  total_successes: number;
+  total_failures: number;
+  seconds_until_retry: number;
+};
+
 export type AdminDashboard = {
   game_state: number;
   total_connected_players: number;
   connected_teams: number;
   total_teams: number;
+  /** 1-based. The server sets this to round_num + 1 already — do not add 1. */
   current_round: number;
   total_rounds: number;
+  /** "supabase" | "cache" | "hardcoded" — confirms the roster source. */
+  roster_source?: string;
+  /** Per-provider breaker state, so a failover is visible not inferred. */
+  image_providers?: ProviderStatus[];
 };
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -168,6 +203,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const handleMessage = useCallback(
     (data: ServerMessage) => {
       const type = data[JSONFields.TYPE];
+
+      // total_rounds arrives on the login response, GAME_RUNNING and every
+      // ROUND_OVER frame. Capturing it once here keeps the UI in step with
+      // GameServer.total_rounds instead of relying on a hardcoded 5.
+      const serverRounds = data[JSONFields.TOTAL_ROUNDS];
+      if (typeof serverRounds === "number" && serverRounds > 0) {
+        patch({ totalRounds: serverRounds });
+      }
 
       // The backend sends these for malformed frames, unauthenticated
       // requests, rate limiting, out-of-turn prompts and image-generation
@@ -209,6 +252,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
             teamState,
             connectedMembers: (data[JSONFields.CONNECTED_TEAM_MEMBERS] as number) ?? 0,
           };
+
 
           if (gameState === GameState.COUNTDOWN) {
             next.countdownEndsAt = Date.now() + time * 1000;

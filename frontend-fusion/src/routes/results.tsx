@@ -5,7 +5,6 @@ import { Panel } from "@/components/dwr/Panel";
 import { ScoreCard } from "@/components/dwr/ScoreCard";
 import { DwrButton } from "@/components/dwr/DwrButton";
 import { useGame } from "@/lib/game-connection";
-import { TOTAL_ROUNDS } from "@/lib/dwr-protocol";
 import { ExternalLink, LogOut, Trophy } from "lucide-react";
 
 export const Route = createFileRoute("/results")({
@@ -24,8 +23,24 @@ function FinalResults() {
     }
   }, [game.userId, game.connected, game.loggingIn, navigate]);
 
-  const podium = game.top3 ?? [];
   const perRound = game.teamScores ?? game.rounds.map((r) => r.score);
+
+  // Prefer the named leaderboard the server now sends. `top3` is bare
+  // (team_id, score) tuples, which could only ever render "TEAM 001";
+  // the leaderboard carries real team names and tie-aware 1-based ranks.
+  const podium =
+    game.leaderboard?.slice(0, 3).map((entry) => ({
+      key: entry.team_id,
+      name: entry.team_name || `TEAM ${String(entry.team_id).padStart(3, "0")}`,
+      score: entry.score,
+      rank: entry.rank,
+    })) ??
+    (game.top3 ?? []).map(([teamId, score], i) => ({
+      key: teamId,
+      name: `TEAM ${String(teamId).padStart(3, "0")}`,
+      score,
+      rank: i + 1,
+    }));
 
   return (
     <div className="min-h-screen">
@@ -48,12 +63,12 @@ function FinalResults() {
           {/* Podium — top 3 straight from the server */}
           {podium.length > 0 && (
             <div className="mb-8 grid gap-4 sm:grid-cols-3">
-              {podium.map(([teamId, score], i) => {
+              {podium.map((entry, i) => {
                 const heights = ["sm:mt-0", "sm:mt-6", "sm:mt-12"];
                 const glow = i === 0 ? "neon" : i === 1 ? undefined : "magenta";
                 return (
                   <Panel
-                    key={teamId}
+                    key={entry.key}
                     className={`p-6 text-center ${heights[i]}`}
                     glow={glow as "neon" | "magenta" | undefined}
                   >
@@ -65,13 +80,13 @@ function FinalResults() {
                       />
                     </div>
                     <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                      Rank #{i + 1}
+                      Rank #{entry.rank}
                     </div>
                     <div className="mt-2 font-mono text-xl font-bold text-foreground">
-                      TEAM {String(teamId).padStart(3, "0")}
+                      {entry.name}
                     </div>
                     <div className="mt-3 font-mono text-3xl font-black tabular-nums text-neon">
-                      {Number(score).toLocaleString()}
+                      {Number(entry.score).toLocaleString()}
                     </div>
                   </Panel>
                 );
@@ -92,7 +107,7 @@ function FinalResults() {
             />
             <ScoreCard
               label="Rounds Completed"
-              value={`${perRound.length} / ${TOTAL_ROUNDS}`}
+              value={`${perRound.length} / ${game.totalRounds}`}
               variant="muted"
             />
           </div>
@@ -125,27 +140,45 @@ function FinalResults() {
             </div>
           </Panel>
 
-          {CTFD_URL && (
-            <Panel glow="magenta" className="mt-8 p-6">
-              <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                // round 02 · capture the flag
-              </div>
-              <h3 className="mt-2 font-mono text-xl font-bold uppercase text-foreground">
-                Continue on the <span className="text-magenta">CTF platform</span>
-              </h3>
-              <p className="mt-2 font-mono text-xs text-muted-foreground">
-                Round 2 runs on an external CTFd instance. Use the link below to enter.
+          {/* Round 2 handoff. This is the only Round 2 UI in the app --
+              CTFd owns the entire CTF experience (challenges, submissions,
+              its own scoreboard). All this does is hand the player over.
+
+              Rendered unconditionally rather than behind `CTFD_URL &&`: if
+              the variable is missing at build time the old version showed
+              nothing at all, so a misconfiguration would look identical to
+              a working page and nobody would notice until 600 people had
+              finished Round 1 with no way forward. */}
+          <Panel glow="magenta" className="mt-8 p-6">
+            <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+              // round 02
+            </div>
+            <h3 className="mt-2 font-mono text-xl font-bold uppercase text-foreground">
+              Round 2 is <span className="text-magenta">live</span>
+            </h3>
+
+            {CTFD_URL ? (
+              <>
+                <p className="mt-2 font-mono text-xs text-muted-foreground">
+                  Round 2 runs on a separate platform. Sign in there to start solving.
+                  Your Round 1 score is already locked in.
+                </p>
+                <a href={CTFD_URL} target="_blank" rel="noreferrer" className="mt-4 inline-block">
+                  <DwrButton icon={<ExternalLink className="h-4 w-4" />}>
+                    Enter Round 2
+                  </DwrButton>
+                </a>
+                <p className="mt-3 break-all font-mono text-[10px] text-muted-foreground">
+                  {CTFD_URL}
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 font-mono text-xs text-magenta">
+                Round 2 link is not configured. Ask an event organiser for the URL.
+                {/* Operator hint: set VITE_CTFD_URL at build time. */}
               </p>
-              <a
-                href={CTFD_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-4 inline-block"
-              >
-                <DwrButton icon={<ExternalLink className="h-4 w-4" />}>Open Round 2</DwrButton>
-              </a>
-            </Panel>
-          )}
+            )}
+          </Panel>
 
           <div className="mt-8 flex justify-end">
             <DwrButton

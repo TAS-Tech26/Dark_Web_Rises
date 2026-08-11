@@ -57,11 +57,15 @@ function Landing() {
               subtitle="Lost In Translation"
               desc="Four minds. One image. Preserve the original"
             />
+            {/* Round 2 runs entirely on CTFd. This card is a description of
+                the event, not an entry point -- the link is handed over on
+                the results page once Round 1 finishes. Deliberately no
+                "start" action here, so nothing implies this app hosts it. */}
             <FeatureCard
               icon={<Lock className="h-5 w-5" />}
               title="Round 02"
               subtitle="Capture the Flag"
-              desc="Every gate is a mystery. Every solution brings you closer to victory."
+              desc="Runs on a separate platform. The link appears here once Round 1 ends."
               accent
             />
             <FeatureCard

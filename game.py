@@ -13,7 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from enumerations import JSONFields, Login, Responses, GameState, TeamState, GamePlay
 from models.server import GameServer
 from paths import CLIENT_HTML, GENERATED_IMAGE_DIR, STATE_FILE, STATIC_DIR
-from services.ai_handling import close_http_client, shutdown_scoring_pool, warm_up_model
+from roster import load_roster
+from services.ai_handling import (
+    close_http_client, provider_status, shutdown_scoring_pool, warm_up_model,
+)
 
 # An invalid LOG_LEVEL used to raise ValueError from basicConfig at import
 # time, i.e. the app refused to boot because of a typo in an env var.
@@ -34,9 +37,16 @@ MAX_WS_FRAME_BYTES = int(os.getenv("MAX_WS_FRAME_BYTES", str(64 * 1024)))
 MAX_LOGIN_ATTEMPTS_PER_SOCKET = int(os.getenv("MAX_LOGIN_ATTEMPTS_PER_SOCKET", "20"))
 MIN_SECONDS_BETWEEN_LOGINS = float(os.getenv("MIN_SECONDS_BETWEEN_LOGINS", "0.5"))
 
-TOTAL_ROUNDS = 5
-ROUND_BREAK_SECONDS = 10
-COUNTDOWN_SECONDS = 5
+# --- Game clock -------------------------------------------------------
+# Environment-configurable so a smoke test doesn't have to sit through the
+# real 90-second turns (a full 5-round game at production timings runs for
+# roughly 40 minutes). Leave these unset for a real event.
+TOTAL_ROUNDS = int(os.getenv("TOTAL_ROUNDS", "5"))
+TIME_PER_ROUND = float(os.getenv("TIME_PER_ROUND", "90"))
+TURN_TIMEOUT = float(os.getenv("TURN_TIMEOUT", "30"))
+ROUND_PENALTY = float(os.getenv("ROUND_PENALTY", "5"))
+ROUND_BREAK_SECONDS = float(os.getenv("ROUND_BREAK_SECONDS", "10"))
+COUNTDOWN_SECONDS = float(os.getenv("COUNTDOWN_SECONDS", "5"))
 
 
 @asynccontextmanager
@@ -102,34 +112,51 @@ if os.path.exists(STATE_FILE):
         STATE_FILE,
     )
 
-# --- In-memory roster -------------------------------------------------
-# Per product requirements this stays an in-memory dictionary (no DB) until
-# a future migration phase. IMPORTANT: these are placeholder credentials.
-# Replace every username/password below with the real event roster before
-# deploying, and never commit real attendee passwords to source control.
+# --- Roster -----------------------------------------------------------
+# Loaded from Supabase, with a local cache so a Supabase outage on the
+# morning of the event cannot stop the app from booting. See roster.py for
+# the fallback order and the environment variables that control it.
+#
+# Credentials still live only in memory once loaded: passwords are hashed
+# inside GameServer at construction and are never held in plain text after
+# that point.
+MAX_MEMBERS_PER_TEAM = int(os.getenv("MAX_MEMBERS_PER_TEAM", "4"))
+
+try:
+    _roster = load_roster(max_members_per_team=MAX_MEMBERS_PER_TEAM)
+except Exception as exc:
+    logger.critical("Refusing to start: %s", exc)
+    raise
+
+_team_names = [
+    os.getenv(f"TEAM_NAME_{i}", f"Team {i + 1}") for i in range(_roster.team_count)
+]
+
 try:
     server = GameServer(
         server_id=0,
-        max_teams=3,
-        max_members_per_team=4,
-        team_names=["name1", "name2", "name3", "name4", "name5", "name6"],
-        player_data={
-            0: ["user1", "password1", 0],
-            1: ["user2", "password2", 0],
-            2: ["user3", "password3", 2],
-            3: ["user4", "password4", 0],
-            4: ["user5", "password5", 0],
-        },
-        admin_data={
-            0: ["admin1", "admin_password1"],
-            1: ["admin2", "admin_password2"],
-        },
+        max_teams=_roster.team_count,
+        max_members_per_team=MAX_MEMBERS_PER_TEAM,
+        team_names=_team_names,
+        player_data=_roster.player_data,
+        admin_data=_roster.admin_data,
     )
 except ValueError as exc:
     logger.critical("Refusing to start: roster configuration is invalid: %s", exc)
     raise
 
 server.total_rounds = TOTAL_ROUNDS
+server.roster_source = _roster.source
+
+logger.info(
+    "Server ready: %s players across %s teams (roster source: %s).",
+    len(server.players), len(server.teams), _roster.source,
+)
+if _roster.source != "supabase":
+    logger.warning(
+        "Roster did NOT come from Supabase this boot (source: %s). Confirm this is "
+        "intended before the event starts.", _roster.source,
+    )
 
 # StaticFiles(directory="static") resolved against the *current working
 # directory*, which is not the project root under Azure App Service's
@@ -613,7 +640,12 @@ async def force_start_game(
     # with a short client timeout to report a failure for a game that did in
     # fact start.
     task = asyncio.create_task(
-        _run_countdown_then_start(game, time_per_round=90, timeout=30, penalty=5)
+        _run_countdown_then_start(
+            game,
+            time_per_round=TIME_PER_ROUND,
+            timeout=TURN_TIMEOUT,
+            penalty=ROUND_PENALTY,
+        )
     )
     task.add_done_callback(_log_task_exception)
 
@@ -652,6 +684,12 @@ async def get_global_dashboard(
         "current_round": game.current_round,
         "total_rounds": game.total_rounds,
         "leaderboard": game.leaderboard(),
+        # So an operator can confirm at a glance that the roster came from
+        # Supabase and not from a stale cache or the placeholder set.
+        "roster_source": getattr(game, "roster_source", "unknown"),
+        # Circuit-breaker state per image provider, so a failover is visible
+        # on the dashboard rather than something to infer from the logs.
+        "image_providers": provider_status(),
     }
 
 

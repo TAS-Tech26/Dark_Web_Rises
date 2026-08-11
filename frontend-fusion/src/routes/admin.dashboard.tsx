@@ -5,7 +5,7 @@ import { Panel } from "@/components/dwr/Panel";
 import { DwrButton } from "@/components/dwr/DwrButton";
 import { StatusPill } from "@/components/dwr/StatusPill";
 import { useGame, type AdminDashboard as BaseAdminDashboardStats } from "@/lib/game-connection";
-import { GameState, TOTAL_ROUNDS } from "@/lib/dwr-protocol";
+import { GameState } from "@/lib/dwr-protocol";
 import { Play, Radio, Loader2, Users, Trophy } from "lucide-react";
 
 export const Route = createFileRoute("/admin/dashboard")({
@@ -198,7 +198,7 @@ function OverviewSection({ stats, starting, notice, onStart }: ControlProps) {
     {
       label: "Round",
       value: stats
-        ? `${String(Math.min(stats.current_round + 1, stats.total_rounds)).padStart(2, "0")} / ${stats.total_rounds}`
+        ? `${String(Math.min(stats.current_round, stats.total_rounds)).padStart(2, "0")} / ${stats.total_rounds}`
         : "—",
       accent: "text-magenta",
     },
@@ -449,8 +449,8 @@ function RoundsSection({
             <span>Current Round</span>
             <span className="text-foreground">
               {stats
-                ? `${Math.min(stats.current_round + 1, stats.total_rounds)} / ${stats.total_rounds}`
-                : `— / ${TOTAL_ROUNDS}`}
+                ? `${Math.min(stats.current_round, stats.total_rounds)} / ${stats.total_rounds}`
+                : "— / —"}
             </span>
           </div>
           <div className="flex justify-between">

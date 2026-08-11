@@ -7,8 +7,8 @@ import os
 import random
 import re
 import threading
-import urllib.parse
 import uuid
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 
@@ -16,25 +16,43 @@ import httpx
 import nltk
 import open_clip
 import torch
-from dotenv import load_dotenv
 from PIL import Image, UnidentifiedImageError
 
+# Importing paths also loads .env -- deliberately, so that every module which
+# reads configuration sees it, including paths.py's own DWR_STATE_DIR.
 from paths import GENERATED_IMAGE_DIR, REFERENCE_IMAGE_DIR, resolve_static_path
+from services.providers import build_chain
 
-load_dotenv()
 logger = logging.getLogger("dwr.ai_handling")
 
+_provider_chain = None
+
+
+def _get_chain():
+    """Built lazily so the environment (including .env) is fully loaded and
+    tests can rebuild the chain after changing configuration."""
+    global _provider_chain
+    if _provider_chain is None:
+        _provider_chain = build_chain()
+    return _provider_chain
+
+
+def reset_chain():
+    """Force the chain to be rebuilt on next use. Used by tests."""
+    global _provider_chain
+    _provider_chain = None
+
 # --- Tunables (overridable via environment for different deployment sizes) ---
-# At ~1200 concurrent users (~300 four-person teams), rounds are synchronized,
-# so all active teams can request an image from the free Pollinations API at
-# roughly the same moment. A semaphore caps how many of those requests are
-# in flight at once so we behave like a well-mannered client instead of
-# hammering a third-party free-tier endpoint (and getting rate-limited or
-# blocked mid-event).
+# Rounds are synchronised, so every active team requests an image at roughly
+# the same moment. A semaphore caps how many are in flight at once, keeping
+# us inside the provider's concurrency allowance instead of triggering the
+# rate limiting we are trying to avoid. Set this to the limit the primary
+# provider actually grants (DeepInfra's documented default is 200 per model).
 MAX_CONCURRENT_IMAGE_REQUESTS = int(os.getenv("MAX_CONCURRENT_IMAGE_REQUESTS", "40"))
-IMAGE_GEN_TIMEOUT_SECONDS = float(os.getenv("IMAGE_GEN_TIMEOUT_SECONDS", "30.0"))
-IMAGE_GEN_MAX_RETRIES = int(os.getenv("IMAGE_GEN_MAX_RETRIES", "3"))
-IMAGE_GEN_BACKOFF_SECONDS = float(os.getenv("IMAGE_GEN_BACKOFF_SECONDS", "1.5"))
+IMAGE_GEN_TIMEOUT_SECONDS = float(os.getenv("IMAGE_GEN_TIMEOUT_SECONDS", "20.0"))
+# Retries against a single endpoint were removed: failover to the next
+# provider is faster and more likely to succeed than retrying a provider
+# that is already struggling. See services/providers.py.
 MAX_PROMPT_LENGTH = int(os.getenv("MAX_PROMPT_LENGTH", "300"))
 
 # Hard cap on how many bytes we will pull down from the image API. Without
@@ -58,6 +76,13 @@ IMAGE_DELIVERY = os.getenv("IMAGE_DELIVERY", "url").strip().lower()
 CLIP_WORKER_THREADS = int(os.getenv("CLIP_WORKER_THREADS", "0")) or max(1, (os.cpu_count() or 2))
 TORCH_THREADS_PER_WORKER = int(os.getenv("TORCH_THREADS_PER_WORKER", "1"))
 
+# Scoring model. Overridable so a rehearsal can compare candidates
+# (tools/clip_bench.py) without a code change -- but note that scores from
+# different models are NOT comparable, so changing this after the reference
+# scores are known invalidates any expectation of what a "good" score is.
+CLIP_MODEL = os.getenv("CLIP_MODEL", "RN50-quickgelu").strip()
+CLIP_PRETRAINED = os.getenv("CLIP_PRETRAINED", "openai").strip()
+
 torch.set_num_threads(TORCH_THREADS_PER_WORKER)
 
 DEFAULT_IMAGE_FALLBACK = "/static/default.png"
@@ -66,7 +91,7 @@ _scoring_executor = ThreadPoolExecutor(
     max_workers=CLIP_WORKER_THREADS, thread_name_prefix="dwr-clip"
 )
 
-_pollinations_semaphore: asyncio.Semaphore | None = None
+_request_semaphore: asyncio.Semaphore | None = None
 _http_client: httpx.AsyncClient | None = None
 _client_lock = threading.Lock()
 
@@ -104,10 +129,10 @@ def _get_http_client() -> httpx.AsyncClient:
 def _get_semaphore() -> asyncio.Semaphore:
     """Same reasoning as _get_http_client: an asyncio.Semaphore created at
     import time attaches to whatever loop happens to touch it first."""
-    global _pollinations_semaphore
-    if _pollinations_semaphore is None:
-        _pollinations_semaphore = asyncio.Semaphore(MAX_CONCURRENT_IMAGE_REQUESTS)
-    return _pollinations_semaphore
+    global _request_semaphore
+    if _request_semaphore is None:
+        _request_semaphore = asyncio.Semaphore(MAX_CONCURRENT_IMAGE_REQUESTS)
+    return _request_semaphore
 
 
 async def close_http_client():
@@ -191,7 +216,18 @@ def _get_model():
         with _model_lock:
             if _model_state["comparator"] is None:
                 try:
-                    comparator, _, preprocess = open_clip.create_model_and_transforms('RN50', pretrained='openai')
+                    # RN50-quickgelu, not RN50. OpenAI's CLIP weights were
+                    # trained with QuickGELU activations; loading them into a
+                    # model built with standard GELU silently computes every
+                    # embedding with the wrong activation function. open_clip
+                    # warns about this ("QuickGELU mismatch between final
+                    # model config and pretrained tag 'openai'") rather than
+                    # failing, so it produced plausible-looking but subtly
+                    # wrong scores. Measured cost of the correct variant:
+                    # 181.5 ms vs 177.0 ms per encode -- i.e. free.
+                    comparator, _, preprocess = open_clip.create_model_and_transforms(
+                        CLIP_MODEL, pretrained=CLIP_PRETRAINED
+                    )
                     comparator.eval()
                 except Exception as exc:
                     # Fail with a message that actually tells whoever is
@@ -231,72 +267,36 @@ def load_image(img_input):
     return Image.open(img_input)
 
 
-def _should_retry(status_code: int) -> bool:
-    """Only retry things that can plausibly succeed on a second attempt.
+async def _generate_image_bytes(prompt: str) -> bytes | None:
+    """Generate an image via the provider chain.
 
-    Previously *every* non-200 was retried three times with backoff, so a
-    permanent 400/404 (a prompt the upstream refuses) burned ~4.5s of a
-    90-second turn doing nothing useful, three times over.
+    Failover is per-request and deliberate: the request that hits a slow or
+    failing provider fails over *itself* rather than being retried, because
+    the player waiting on it has a hard turn deadline. Recovery probing is
+    handled by each provider's circuit breaker (services/providers.py), so
+    no waiting player ever pays for it.
+
+    The old single-provider retry loop is gone. Three retries with backoff
+    against one endpoint burned 60s+ of a 90-second turn and could still
+    return nothing; one fast attempt per provider is strictly better for the
+    player and for the round clock.
     """
-    return status_code == 429 or 500 <= status_code < 600
-
-
-async def _fetch_pollinations_image(prompt: str) -> bytes | None:
-    """Fetch a generated image from Pollinations with bounded retries.
-
-    Returns the raw image bytes, or None if every attempt failed (the caller
-    decides how to degrade).
-    """
-    # safe="" is load-bearing. urllib.parse.quote() leaves "/" unescaped by
-    # default, and the prompt is interpolated into the URL *path* -- so a
-    # prompt containing a slash silently rewrote the request path rather than
-    # being sent as prompt text.
-    encoded_prompt = urllib.parse.quote(prompt, safe="")
-    url = f"https://image.pollinations.ai/p/{encoded_prompt}?model=flux&width=1024&height=1024"
+    chain = _get_chain()
+    if not chain.providers:
+        logger.error("No image providers configured; cannot generate.")
+        return None
 
     semaphore = _get_semaphore()
     client = _get_http_client()
 
-    for attempt in range(1, IMAGE_GEN_MAX_RETRIES + 1):
-        try:
-            async with semaphore:
-                async with client.stream("GET", url) as response:
-                    if response.status_code == 200:
-                        chunks = []
-                        total = 0
-                        async for chunk in response.aiter_bytes():
-                            total += len(chunk)
-                            if total > MAX_IMAGE_BYTES:
-                                logger.error(
-                                    "Image response exceeded %s bytes; aborting download.",
-                                    MAX_IMAGE_BYTES,
-                                )
-                                chunks = []
-                                break
-                            chunks.append(chunk)
-                        if chunks:
-                            return b"".join(chunks)
-                    else:
-                        logger.warning(
-                            "Pollinations returned status %s on attempt %s/%s",
-                            response.status_code, attempt, IMAGE_GEN_MAX_RETRIES,
-                        )
-                        if not _should_retry(response.status_code):
-                            return None
-        except (httpx.TimeoutException, httpx.TransportError) as exc:
-            logger.warning(
-                "Pollinations request failed on attempt %s/%s: %s",
-                attempt, IMAGE_GEN_MAX_RETRIES, exc,
-            )
+    async with semaphore:
+        return await chain.generate(client, prompt)
 
-        if attempt < IMAGE_GEN_MAX_RETRIES:
-            await asyncio.sleep(IMAGE_GEN_BACKOFF_SECONDS * attempt)
 
-    logger.error(
-        "Pollinations image generation failed after %s attempts for prompt %r",
-        IMAGE_GEN_MAX_RETRIES, prompt[:80],
-    )
-    return None
+def provider_status() -> list:
+    """Breaker state per provider, surfaced on the admin dashboard so an
+    operator can see a failover happening rather than inferring it."""
+    return _get_chain().snapshot()
 
 
 def _write_generated_image(image_bytes: bytes) -> str | None:
@@ -355,7 +355,7 @@ async def get_image(prompt):
     # technically "valid") prompt can't produce an oversized outbound URL.
     safe_prompt = (prompt or "")[:MAX_PROMPT_LENGTH]
 
-    image_bytes = await _fetch_pollinations_image(safe_prompt)
+    image_bytes = await _generate_image_bytes(safe_prompt)
     if image_bytes is None:
         return None
 
@@ -375,18 +375,84 @@ async def get_image(prompt):
     return f"data:image/jpeg;base64,{image_base64}"
 
 
+# Cached embeddings for the *reference* images only. Bounded because the
+# cache key is a caller-supplied path; an unbounded dict keyed on user-
+# reachable input is a slow memory leak in a process that cannot be
+# horizontally scaled.
+_EMBED_CACHE_MAX = int(os.getenv("CLIP_EMBED_CACHE_SIZE", "64"))
+_embed_cache: "OrderedDict[str, object]" = OrderedDict()
+_embed_cache_lock = threading.Lock()
+
+
+def _cacheable(reference) -> bool:
+    """Only the fixed reference images under /static/images/ are cached.
+
+    Generated images are unique per turn, so caching them would fill the
+    cache with entries that are never read again. Data URIs are worse: the
+    key would be the entire base64 payload.
+    """
+    return isinstance(reference, str) and reference.startswith("/static/images/")
+
+
+def _encode(reference, comparator, preprocess):
+    """Embed an image, reusing a cached embedding for reference images.
+
+    The result is bit-identical to encoding every time -- reference images
+    are immutable files and the model is deterministic under no_grad -- so
+    this changes latency and nothing else. Scores are unaffected.
+    """
+    if _cacheable(reference):
+        with _embed_cache_lock:
+            cached = _embed_cache.get(reference)
+            if cached is not None:
+                _embed_cache.move_to_end(reference)
+                return cached
+
+    tensor = preprocess(load_image(reference)).unsqueeze(0)
+    # NO autocast here, deliberately. `torch.amp.autocast('cpu')` casts to
+    # bfloat16, and on a CPU without AMX or AVX512-BF16 those kernels are
+    # emulated. Measured on the dev machine with tools/clip_bench.py
+    # --diagnose:
+    #
+    #     encode WITH autocast('cpu')      9867.5 ms
+    #     encode WITHOUT autocast (fp32)     43.3 ms     <- 228x faster
+    #
+    # It reads like an optimisation, which is exactly why it survived two
+    # review passes. Do not add it back without re-running that diagnostic
+    # on the actual deployment hardware.
+    with torch.no_grad():
+        features = comparator.encode_image(tensor)
+        features = features / features.norm(dim=-1, keepdim=True)
+
+    if _cacheable(reference):
+        with _embed_cache_lock:
+            _embed_cache[reference] = features
+            while len(_embed_cache) > _EMBED_CACHE_MAX:
+                _embed_cache.popitem(last=False)
+    return features
+
+
+def reset_embed_cache():
+    """Drop cached reference embeddings. Used by tests, and safe to call if
+    the reference images are ever replaced while the process is running."""
+    with _embed_cache_lock:
+        _embed_cache.clear()
+
+
 def _compare_image_sync(penalty, original, new):
     """CPU-bound CLIP similarity scoring. Runs off the event loop on a
-    dedicated bounded thread pool (see compare_image)."""
-    image_comparator, preprocess = _get_model()
-    image1 = preprocess(load_image(original)).unsqueeze(0)
-    image2 = preprocess(load_image(new)).unsqueeze(0)
+    dedicated bounded thread pool (see compare_image).
 
-    with torch.no_grad(), torch.amp.autocast('cpu'):
-        feat1 = image_comparator.encode_image(image1)
-        feat2 = image_comparator.encode_image(image2)
-        feat1 /= feat1.norm(dim=-1, keepdim=True)
-        feat2 /= feat2.norm(dim=-1, keepdim=True)
+    Two encodes per call, one of which is the round's reference image and is
+    therefore the same for every team that drew it. That one is cached: at
+    150 teams sharing a handful of reference images it removes almost half
+    the scoring work, for identical scores.
+    """
+    image_comparator, preprocess = _get_model()
+    feat1 = _encode(original, image_comparator, preprocess)
+    feat2 = _encode(new, image_comparator, preprocess)
+
+    with torch.no_grad():
         similarity = (feat1 @ feat2.T).item()
 
     sim_clipped = max(0.0, min(similarity, 1.0))

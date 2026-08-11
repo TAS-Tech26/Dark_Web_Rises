@@ -4,7 +4,7 @@ import { TopNav } from "@/components/dwr/TopNav";
 import { Panel } from "@/components/dwr/Panel";
 import { ScoreCard } from "@/components/dwr/ScoreCard";
 import { useGame, useSecondsUntil } from "@/lib/game-connection";
-import { GameState, TOTAL_ROUNDS, TeamState } from "@/lib/dwr-protocol";
+import { GameState, TeamState } from "@/lib/dwr-protocol";
 import { CheckCircle2 } from "lucide-react";
 
 export const Route = createFileRoute("/round-1-results")({
@@ -28,7 +28,7 @@ function RoundResults() {
   }, [game.userId, game.connected, game.loggingIn, game.gameState, game.teamState, navigate]);
 
   const completedRound = Math.max(1, game.currentRound);
-  const isFinalRound = completedRound >= TOTAL_ROUNDS;
+  const isFinalRound = completedRound >= game.totalRounds;
   const bestRound = game.rounds.reduce<number | null>(
     (best, r) => (best === null || r.score > best ? r.score : best),
     null,
@@ -62,7 +62,7 @@ function RoundResults() {
             <ScoreCard
               label="Round Score"
               value={(game.lastRoundScore ?? 0).toLocaleString()}
-              hint={`Round ${completedRound} of ${TOTAL_ROUNDS}`}
+              hint={`Round ${completedRound} of ${game.totalRounds}`}
             />
             <ScoreCard
               label="Team Total"

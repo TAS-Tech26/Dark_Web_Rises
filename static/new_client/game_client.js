@@ -160,6 +160,15 @@ class GameClient {
                     }
 
                     if (this.on_admin_login_success) this.on_admin_login_success(this.user_id, this.admin_token);
+                } else if (data[JSONFields.AUTHORISED] === Login.LOCKED) {
+                    // The admin account is rate-limited after repeated failed
+                    // attempts. Previously the server sent this as a
+                    // login_response, which this branch never saw, so the
+                    // admin screen showed nothing and the lockout was silent.
+                    const retryAfter = Math.ceil(data[JSONFields.RETRY_AFTER] ?? 60);
+                    console.warn(`Admin account locked. Retry in ${retryAfter}s.`);
+                    if (this.on_login_locked) this.on_login_locked(retryAfter);
+                    else if (this.on_login_failed) this.on_login_failed(data[JSONFields.STATUS]);
                 } else {
                     if (this.on_login_failed) this.on_login_failed(data[JSONFields.STATUS]);
                 }

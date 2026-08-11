@@ -28,6 +28,26 @@ import os
 # Directory containing this file == the project root.
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
+# Load .env here, in the lowest-level module, before *anything* reads a
+# variable. It used to be loaded inside services/ai_handling.py -- but that
+# module imports this one first, so DWR_STATE_DIR below was read before .env
+# had been applied and any value set there was silently ignored.
+#
+# The path is explicit for the same reason every other path in this file is:
+# bare load_dotenv() searches upward from the current working directory, so
+# it would miss .env whenever the process is started from somewhere other
+# than the project root (Azure App Service's startup.sh, a systemd unit
+# without WorkingDirectory=, ...).
+#
+# Real environment variables take precedence over .env by default, so
+# anything exported in the shell still wins.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
+except ImportError:  # pragma: no cover - python-dotenv is in requirements.txt
+    pass
+
 STATIC_DIR = os.path.join(PROJECT_ROOT, "static")
 REFERENCE_IMAGE_DIR = os.path.join(STATIC_DIR, "images")
 GENERATED_IMAGE_DIR = os.path.join(STATIC_DIR, "generated")

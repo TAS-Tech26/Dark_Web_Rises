@@ -5,3 +5,11 @@ __pycache__/
 *.pyc
 .env
 game_state.json
+
+# Contains attendee credentials in plain text (GameServer needs the
+# plaintext at boot to hash it). Never commit.
+roster_cache.json
+
+# Generated round images, written at runtime when IMAGE_DELIVERY=url.
+static/generated/
+loadtest/loadtest_game_state.json
