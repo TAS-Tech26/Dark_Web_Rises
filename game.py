@@ -297,11 +297,29 @@ async def get_global_dashboard(admin_id: int = Depends(verify_admin_session), ga
     return {
         "game_state": game.game_state,
         "total_connected_players": len(game.connected_players),
-        "team_names":game.team_names,
+        "team_names": [
+            {
+                "team_id": team.id,
+                "team_name": team.team_name,
+                # Assigned capacity vs active connections
+                "total_members": team.max_members,
+                "connected_members": len(team.connected_sockets),
+                
+                # Sum up scores if score is a list of round points
+                "score": sum(team.score) if isinstance(team.score, list) else (team.score or 0),
+                
+                # List of member IDs or objects inside self.members
+                "members": [
+                    m.name if hasattr(m, "name") else str(m) 
+                    for m in team.members
+                ]
+            }
+            for team in game.teams
+        ],
         "connected_teams": connected_teams,
         "total_teams": len(game.teams),
         "current_round": game.current_round,
-        "total_rounds": game.total_rounds
+        "total_rounds": game.total_rounds,
     }
 
 @app.get("/")
