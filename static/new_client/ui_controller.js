@@ -6,6 +6,7 @@ const game = new GameClient(`${wsProtocol}//${window.location.host}/ws`);
 
 // --- DOM OBJECT TARGET CACHING ---
 let activeAdminId = null;
+let activeAdminToken = null;
 let adminMonitorInterval = null;
 
 const loginScreen = document.getElementById("login_screen");
@@ -88,20 +89,14 @@ game.on_login_success = (userId) => {
     addLog(`Operator successfully verified. ID: ${userId}`);
 };
 
-game.on_admin_login_success = (adminId) => {
-    console.log("=== ADMIN HOOK ACTIVATED ===");
-    console.log("Raw adminId parameter received:", adminId);
-    
-    // 1. If the value is undefined, it means game_client.js read the wrong JSON key.
-    // Let's log 'game' object status to see if it got stored somewhere else:
-    console.log("Current game client state:", game);
+game.on_admin_login_success = (adminId, adminToken) => {
+    // Assign the true value (or check game.user_id if adminId was misplaced)
+    // Use ?? so an admin id of 0 isn't treated as missing
+    activeAdminId = adminId ?? game.user_id;
+    activeAdminToken = adminToken ?? game.admin_token;
 
-    // 2. Assign the true value (or check game.user_id if adminId was misplaced)
-    //    Use ?? so an admin id of 0 isn't treated as missing
-    activeAdminId = adminId ?? game.user_id; 
-    
-    if (activeAdminId === null || activeAdminId === undefined) {
-        console.error("CRITICAL: No valid admin session key found in login packet!");
+    if (activeAdminId === null || activeAdminId === undefined || !activeAdminToken) {
+        console.error("CRITICAL: No valid admin session key/token found in login packet!");
         adminStatusMsg.textContent = "Auth Error: Missing Session Key.";
         adminStatusMsg.style.color = "var(--danger-color)";
         return; // Don't start polling with bad data
@@ -118,6 +113,17 @@ game.on_admin_login_success = (adminId) => {
 };
 
 game.on_logout_success = () => {
+    // Bug fix: admin_logout_button previously had no click listener at all,
+    // so clicking "Terminate Session" did nothing. Both the player logout
+    // button and the admin logout button funnel here via game.logout(); make
+    // sure admin client-side state and the telemetry poller are torn down
+    // too, not just the player-facing screen.
+    activeAdminId = null;
+    activeAdminToken = null;
+    if (adminMonitorInterval) {
+        clearInterval(adminMonitorInterval);
+        adminMonitorInterval = null;
+    }
     showScreen(loginScreen);
 };
 
@@ -286,18 +292,16 @@ function submitCurrentPrompt() {
 
 async function fetchAdminDashboardTelemetry() {
     // If this prints, it means the polling loop is active but you aren't authenticated as an admin yet
-    if (activeAdminId === null || activeAdminId === undefined) {
-        console.warn("Telemetry Polling: Skipped (activeAdminId is null). Ensure admin login succeeded.");
-        return; 
+    if (!activeAdminToken) {
+        console.warn("Telemetry Polling: Skipped (activeAdminToken is null). Ensure admin login succeeded.");
+        return;
     }
-    
-    console.log(`[Telemetry Request] Fetching data with X-Admin-Id: ${activeAdminId}`);
-    
+
     try {
         const response = await fetch("/admin/dashboard", {
             method: "GET",
-            headers: { 
-                "X-Admin-Id": String(activeAdminId),
+            headers: {
+                "X-Admin-Token": activeAdminToken,
                 "Accept": "application/json"
             }
         });
@@ -349,7 +353,7 @@ async function adminTriggerRunGame() {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "X-Admin-Id": activeAdminId // Authorization context header criteria
+                "X-Admin-Token": activeAdminToken // Authorization context header criteria
             }
         });
         
@@ -390,6 +394,10 @@ document.getElementById("login_button").addEventListener("click", () => {
 });
 
 document.getElementById("logout_button").addEventListener("click", () => {
+    game.logout();
+});
+
+document.getElementById("admin_logout_button").addEventListener("click", () => {
     game.logout();
 });
 

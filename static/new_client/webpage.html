@@ -370,7 +370,9 @@
         </div>
     </div>
 
+    <!-- ui_controller.js already `import`s game_client.js as an ES module,
+         so it does not need its own <script> tag here; loading it twice
+         was harmless (browsers dedupe module fetches by URL) but redundant. -->
     <script type="module" src="/static/new_client/ui_controller.js"></script>
-    <script type="module" src="/static/new_client/game_client.js"></script>
 </body>
 </html>
