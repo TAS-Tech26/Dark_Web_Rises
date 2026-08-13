@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CTF Video Player</title>
+  <style>
+    body {
+      background-color: #212529; 
+      color: white;
+      font-family: sans-serif;
+      margin: 0;
+      padding: 40px 20px; /* Adds some space at the top of the page */
+    }
+
+    /* The new Flexbox wrapper that holds both columns */
+    .layout-wrapper {
+      display: flex;
+      justify-content: center; /* Centers the whole block horizontally */
+      align-items: flex-start; /* Aligns both columns to the top */
+      gap: 40px; /* The space between the videos and the text */
+      max-width: 1000px; 
+      margin: 0 auto;
+    }
+
+    /* Left Column: The Video Player */
+    .ctf-container { 
+      flex: 1; /* Allows it to scale */
+      max-width: 600px; 
+      text-align: center; 
+    }
+    .video-box { 
+      width: 100%; 
+      height: auto; 
+      margin-bottom: 15px; 
+      border-radius: 8px; 
+      box-shadow: 0 4px 8px rgba(0,0,0,0.5); /* Optional: Adds a nice shadow */
+    }
+    .controls { 
+      margin-bottom: 15px; 
+      display: flex; 
+      justify-content: center; 
+      gap: 15px; 
+    }
+    button, select { 
+      padding: 8px 12px; 
+      cursor: pointer; 
+      border-radius: 4px; 
+      background-color: #333;
+      color: white;
+      border: 1px solid #555;
+    }
+
+    /* Right Column: The Text Description */
+    .text-content {
+      flex: 1;
+      max-width: 350px;
+      background-color: #2c3034; /* Slightly lighter background to make it pop */
+      padding: 25px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      line-height: 1.6;
+    }
+    .text-content h2 {
+      margin-top: 0;
+      color: #00a8ff; /* Adds a bit of hacker-style color to the title */
+    }
+  </style>
+</head>
+<body>
+
+  <div class="layout-wrapper">
+    
+    <!-- LEFT COLUMN: Videos -->
+    <div class="ctf-container">
+      <!-- Main Video -->
+      <video id="main-video" class="video-box" controls>
+        <source src="cashmoney.mp4" type="video/mp4">
+      </video>
+
+      <!-- Spectrogram Video (Hidden by default) -->
+      <video id="spec-video" class="video-box" style="display: none;" muted>
+        <source src="cashmoney.mp4" type="video/mp4">
+      </video>
+
+      <div class="controls">
+        <button id="toggle-spec" onclick="toggleSpectrogram()">View Spectrogram</button>
+        
+        <select id="speed-select" onchange="changeSpeed()">
+          <option value="-2">Reverse 2x</option>
+          <option value="-1.5">Reverse 1.5x</option>
+          <option value="1" selected>Normal 1x</option>
+          <option value="1.5">Forward 1.5x</option>
+          <option value="2">Forward 2x</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN: Text -->
+    <div class="text-content">
+      <h2>Challenge Briefing</h2>
+      <p>
+        A good clinician always listens closely to their patients, but secrets require you to reverse the arrow of time. 
+        Once the sound flows backward, do not trust your ears, trust your eyes. 
+        Open the terminal's frequency visualizer to look at the heat map of the audio track.
+      </p>
+      <p>
+        The vertical bars of light hide a secret command written in Morse Code. 
+        But beware: when time flips, the message mirrors. Trace the code from right to left to break the first lock.
+      </p>
+      <p><strong>Flag Format:</strong> CTF{your_decoded_string}</p>
+    </div>
+
+  </div>
+
+  <script>
+    const mainVideo = document.getElementById('main-video');
+    const specVideo = document.getElementById('spec-video');
+    const toggleBtn = document.getElementById('toggle-spec');
+
+    const mainSources = {
+        "-2": "absrad.mp4",
+        "-1.5": "uumuu.mp4",
+        "1": "cashmoney.mp4",
+        "1.5": "nkg.mp4",
+        "2": "garama.mp4"
+    };
+
+    const specSources = {
+        "-2": "absrad.mp4",
+        "-1.5": "uumuu.mp4",
+        "1": "cashmoney.mp4",
+        "1.5": "nkg.mp4",
+        "2": "garama.mp4"
+    };
+
+    function toggleSpectrogram() {
+      if (specVideo.style.display === 'none') {
+        specVideo.style.display = 'block';
+        toggleBtn.innerText = 'Hide Spectrogram';
+        specVideo.currentTime = mainVideo.currentTime; 
+      } else {
+        specVideo.style.display = 'none';
+        toggleBtn.innerText = 'View Spectrogram';
+      }
+    }
+
+    mainVideo.addEventListener('play', () => specVideo.play());
+    mainVideo.addEventListener('pause', () => specVideo.pause());
+    mainVideo.addEventListener('seeked', () => {
+      specVideo.currentTime = mainVideo.currentTime;
+    });
+    mainVideo.addEventListener('timeupdate', () => {
+      if (Math.abs(mainVideo.currentTime - specVideo.currentTime) > 0.3) {
+        specVideo.currentTime = mainVideo.currentTime;
+      }
+    });
+
+    function changeSpeed() {
+      const speed = document.getElementById('speed-select').value;
+      mainVideo.src = mainSources[speed];
+      specVideo.src = specSources[speed];
+      mainVideo.play();
+    }
+  </script>
+</body>
+</html>
