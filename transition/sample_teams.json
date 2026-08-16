@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "fetched_at": 1786463794.321024,
+  "team_count": 1,
+  "players": [
+    {
+      "id": 1,
+      "username": "Hayley Jones",
+      "password": "76869Hayley",
+      "team_id": 0,
+      "team_password": "team_password1",
+      "score": 66.86
+    },
+    {
+      "id": 2,
+      "username": "Charles Schmidt",
+      "password": "16313Charles",
+      "team_id": 0,
+      "team_password": "team_password1",
+      "score": 66.86
+    },
+    {
+      "id": 3,
+      "username": "Richard Young",
+      "password": "77635Richard",
+      "team_id": 0,
+      "team_password": "team_password1",
+      "score": 66.86
+    },
+    {
+      "id": 4,
+      "username": "Laura Schmidt",
+      "password": "80544Laura",
+      "team_id": 0,
+      "team_password": "team_password1",
+      "score": 66.86
+    }
+  ],
+  "phase": 2,
+  "source_round": 0,
+  "cutoff_score": 66.86
+}
