@@ -5,7 +5,7 @@ MAX_POINTS_CTF = 430
 MAX_POINTS_ROUND1 = 500
 
 CTFD_URL = "enter CTFd url here"
-CTFD_ADMIN_TOKEN = "ctfd_5a67597ccc1d63ca1c95c2038b1d041083e22b1c3c27da8528fcaae16efa5ac2"
+CTFD_ADMIN_TOKEN = "ctfd token here"
 
 #sorted in order of score 
 PHASE1_STATE = "here phase 1 state json here"
