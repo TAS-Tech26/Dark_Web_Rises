@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Global CTF Leaderboards</title>
+  <style>
+    body {
+      background-color: #121212;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 30px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #00ffcc;
+      margin-bottom: 40px;
+      font-size: 2.5rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    /* Container to hold the 3 boards side-by-side */
+    .leaderboard-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 30px;
+      justify-content: center;
+    }
+
+    /* Individual leaderboard boxes */
+    .board {
+      background-color: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 20px;
+      flex: 1;
+      min-width: 300px;
+      max-width: 450px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
+
+    .board h2 {
+      text-align: center;
+      margin-top: 0;
+      color: #ffffff;
+      border-bottom: 2px solid #00ffcc;
+      padding-bottom: 10px;
+    }
+
+    /* Table Styling */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+
+    th, td {
+      padding: 12px 10px;
+      text-align: left;
+      border-bottom: 1px solid #333;
+    }
+
+    th {
+      color: #a0a0a0;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.85rem;
+    }
+
+    tr:nth-child(even) {
+      background-color: #252525;
+    }
+
+    tr:hover {
+      background-color: #333333;
+    }
+
+    .rank {
+      font-weight: bold;
+      color: #00ffcc;
+      width: 40px;
+    }
+
+    .team-name {
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Final Operation Results</h1>
+
+  <div class="leaderboard-container">
+    
+    <!-- Phase 1 Board -->
+    <div class="board">
+      <h2>Phase 1</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Team</th>
+            <th>Raw</th>
+            <th>Norm</th>
+          </tr>
+        </thead>
+        <tbody id="phase1-body">
+          <!-- Rows injected by JS -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- CTFd Board -->
+    <div class="board">
+      <h2>CTF Phase</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Team</th>
+            <th>Raw</th>
+            <th>Norm</th>
+          </tr>
+        </thead>
+        <tbody id="ctf-body">
+          <!-- Rows injected by JS -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Final Combined Board -->
+    <div class="board">
+      <h2>Combined Overall</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Team</th>
+            <th>Final Score</th>
+          </tr>
+        </thead>
+        <tbody id="combined-body">
+          <!-- Rows injected by JS -->
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <script>
+    const score_path = "enter path to scores json here";
+    fetch(score_path)
+      .then(response => response.json())
+      .then(data => {
+        populate_table('phase1-body', data.round1, true);
+        populate_table('ctf-body', data.ctf, true);
+        populate_table('combined-body', data.combined, false);
+      })
+      .catch(error => {
+        console.error("Error loading scores:", error);
+        document.body.innerHTML += "<p style='text-align:center;color:red;'>Failed to load scores.</p>";
+      });
+
+    function populate_table(tbodyId, teamData, hasRawData) {
+      const tbody = document.getElementById(tbodyId);
+      
+      teamData.forEach((row, index) => {
+        const tr = document.createElement('tr');
+        
+        let htmlContent = `
+          <td class="rank">#${index + 1}</td>
+          <td class="team-name">${row.team}</td>
+        `;
+
+        if (hasRawData) {
+          htmlContent += `
+            <td>${row.raw_score}</td>
+            <td>${row.normalized}</td>
+          `;
+        } else {
+          htmlContent += `
+            <td style="color: #00ffcc; font-weight: bold;">${row.score}</td>
+          `;
+        }
+
+        tr.innerHTML = htmlContent;
+        tbody.appendChild(tr);
+      });
+    }
+  </script>
+</body>
+</html>
