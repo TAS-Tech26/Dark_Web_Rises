@@ -14,7 +14,7 @@ LAST_COMPLETED_ROUND = "4" #i guess
 SCORES_OUTPUT_PATH = "enter path to scores json here"
 
 headers = {
-    "Authorization": CTFD_ADMIN_TOKEN,
+    "Authorization": f"Token {CTFD_ADMIN_TOKEN}",
     "Content-Type": "application/json"
 }
 
