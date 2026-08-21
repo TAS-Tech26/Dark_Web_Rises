@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hidden Text Challenge</title>
+  <style>
+    body {
+      background-color: #212529; 
+      color: #f8f9fa; 
+      font-family: monospace;
+      padding: 40px;
+      text-align: center;
+      font-size: 20px;
+    }
+
+    .log-box {
+      background-color: #1c1e22;
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: 30px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+  
+    .secret-text {
+      color: transparent; 
+    }
+
+   
+    .secret-text::selection {
+      background-color: #00ff00; 
+      color: #000000; 
+    }
+
+    /*mozilla apparently can cause problems or something*/
+    .secret-text::-moz-selection {
+      background-color: #00ff00;
+      color: #000000;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="layout-wrapper">
+    <div class="log-box">
+      <h2>Patient Zero</h2>
+      <p>Patient Zero disappeared in 1984. Security records show the last confirmed sighting was outside the building where 
+        Vance delivered confidential psychiatric evaluations for the state Sweep across the void, reveal what was never meant 
+        to be visible, then untangle the forgotten place where his obsession first took root.</p>
+      
+      <!-- invisible text -->
+      <p class="secret-text">A N A H D I V A H D U O S</p>
+      
+    </div>
+  </div>
+
+</body>
+</html>

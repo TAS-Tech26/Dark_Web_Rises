@@ -1,0 +1,15 @@
+==============================
+      RTX 5060 BENCHMARK RESULTS      
+==============================
+Generation Time : 3.97 seconds
+Throughput      : 5.04 iterations/second (it/s)
+Peak VRAM Used  : 3.18 GB
+==============================
+
+========================================
+   RTX 5060 OPTIMIZED BENCHMARK RESULTS   
+========================================
+Generation Time : 1.51 seconds
+Throughput      : 7.97 iterations/second (it/s)
+Peak VRAM Used  : 3.02 GB
+========================================

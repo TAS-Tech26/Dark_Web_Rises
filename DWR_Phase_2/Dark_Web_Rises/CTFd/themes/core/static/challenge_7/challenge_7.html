@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3x6 Jigsaw Puzzle</title>
+  <style>
+    :root {
+      --board-width: 600px;
+      --board-height: 800px;
+      --piece-width: 200px;     /* 600px / 3 cols */
+      --piece-height: 133.33px; /* 800px / 6 rows */
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #0a192f; /* Dark Navy Blue */
+      color: #e6f1ff;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 { margin-bottom: 5px; }
+    p { color: #8892b0; margin-bottom: 20px; }
+
+    /* 6 rows x 3 columns Board */
+    #puzzle-board {
+      width: var(--board-width);
+      height: var(--board-height);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(6, 1fr);
+      border: 3px solid #64ffda;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      background-color: #020c1b;
+    }
+
+    .slot {
+      width: 100%;
+      height: 100%;
+      border: 1px dashed rgba(100, 255, 218, 0.15);
+      box-sizing: border-box;
+    }
+
+    .piece {
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      box-sizing: border-box;
+      user-select: none;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .piece:active {
+      cursor: grabbing;
+      opacity: 0.8;
+    }
+
+    /* Container for the glowing reveal trigger */
+    #trigger-container {
+      margin-top: 25px;
+      height: 50px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Glowing interactive target area */
+    .glowing-btn {
+      padding: 12px 28px;
+      font-size: 1rem;
+      font-weight: bold;
+      color: #0a192f;
+      background-color: #64ffda;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 0 15px #64ffda, 0 0 30px #64ffda;
+      animation: pulse 1.8s infinite alternate;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .glowing-btn:hover {
+      transform: scale(1.08);
+      box-shadow: 0 0 25px #64ffda, 0 0 50px #64ffda;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 10px #64ffda; }
+      100% { box-shadow: 0 0 25px #64ffda, 0 0 45px #64ffda; }
+    }
+
+    /* Paper Modal Overlay */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(2, 12, 27, 0.85);
+      backdrop-filter: blur(5px);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    /* Paper Scroll / Letter Design */
+    .paper-note {
+      position: relative;
+      width: 90%;
+      max-width: 450px;
+      background: #fdf6e2;
+      color: #2b2b2b;
+      padding: 40px 30px 30px 30px;
+      border-radius: 4px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5), inset 0 0 50px rgba(210, 180, 140, 0.4);
+      border: 1px solid #d4c5a9;
+      transform: scale(0.7);
+      opacity: 0;
+      transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-overlay.active .paper-note {
+      transform: scale(1);
+      opacity: 1;
+    }
+
+    /* Secret message styling */
+    .paper-content {
+      font-family: 'Georgia', serif;
+      font-size: 1.15rem;
+      line-height: 1.6;
+      text-align: center;
+      color: #3d2b1f;
+    }
+
+    .close-btn {
+      position: absolute;
+      top: 10px;
+      right: 15px;
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      color: #8b5a2b;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>3x6 Jigsaw Puzzle</h1>
+  <p>Drag and swap any piece to arrange the image correctly.</p>
+
+  <div id="puzzle-board"></div>
+  
+  <div id="trigger-container"></div>
+
+  <!-- Paper Modal -->
+  <div id="paper-modal" class="modal-overlay">
+    <div class="paper-note">
+      <button class="close-btn" id="close-modal">&times;</button>
+      <div class="paper-content">
+        <!-- REPLACE YOUR MESSAGE HERE -->
+        <h3 style="margin-top: 0; color: #8b5a2b;">A Secret Unlocked!</h3>
+        <p>The Raven Watched From The East</p>
+        <!-- --------------------------- -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const imageUrl = 'transylvania_jigsaw.png';
+    
+    const rows = 6;
+    const cols = 3;
+    const totalPieces = rows * cols; // 18 pieces
+
+    const boardWidth = 600;
+    const boardHeight = 800;
+    const pieceW = boardWidth / cols;  // 200px
+    const pieceH = boardHeight / rows; // 133.33px
+
+    const board = document.getElementById('puzzle-board');
+    const triggerContainer = document.getElementById('trigger-container');
+    const modal = document.getElementById('paper-modal');
+    const closeModalBtn = document.getElementById('close-modal');
+
+    // 1. Create linear original indices and shuffle them
+    const originalIndices = Array.from({ length: totalPieces }, (_, i) => i);
+    let shuffledIndices = [...originalIndices];
+    
+    do {
+      shuffledIndices.sort(() => Math.random() - 0.5);
+    } while (shuffledIndices.every((val, index) => val === index));
+
+    // 2. Build 18 grid slots
+    for (let slotIdx = 0; slotIdx < totalPieces; slotIdx++) {
+      const slot = document.createElement('div');
+      slot.classList.add('slot');
+      slot.dataset.slotIndex = slotIdx;
+
+      slot.addEventListener('dragover', (e) => e.preventDefault());
+      slot.addEventListener('drop', handleDrop);
+
+      const pieceOriginalIndex = shuffledIndices[slotIdx];
+      const piece = createPiece(pieceOriginalIndex);
+      slot.appendChild(piece);
+
+      board.appendChild(slot);
+    }
+
+    function createPiece(originalIndex) {
+      const piece = document.createElement('div');
+      piece.classList.add('piece');
+      piece.draggable = true;
+      piece.dataset.originalIndex = originalIndex;
+
+      const col = originalIndex % cols;
+      const row = Math.floor(originalIndex / cols);
+      
+      const posX = col * pieceW;
+      const posY = row * pieceH;
+
+      piece.style.backgroundImage = `url("${imageUrl}")`;
+      piece.style.backgroundSize = `${boardWidth}px ${boardHeight}px`;
+      piece.style.backgroundPosition = `-${posX}px -${posY}px`;
+
+      piece.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', slotOfPiece(piece));
+      });
+
+      return piece;
+    }
+
+    function slotOfPiece(pieceElement) {
+      return pieceElement.parentElement.dataset.slotIndex;
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+
+      let targetSlot = e.target;
+      if (!targetSlot.classList.contains('slot')) {
+        targetSlot = targetSlot.parentElement;
+      }
+      if (!targetSlot || !targetSlot.classList.contains('slot')) return;
+
+      const sourceSlotIndex = e.dataTransfer.getData('text/plain');
+      const targetSlotIndex = targetSlot.dataset.slotIndex;
+
+      if (sourceSlotIndex === targetSlotIndex) return;
+
+      const sourceSlot = document.querySelector(`.slot[data-slot-index="${sourceSlotIndex}"]`);
+      
+      const sourcePiece = sourceSlot.firstElementChild;
+      const targetPiece = targetSlot.firstElementChild;
+
+      sourceSlot.appendChild(targetPiece);
+      targetSlot.appendChild(sourcePiece);
+
+      checkWinCondition();
+    }
+
+    function checkWinCondition() {
+      const slots = document.querySelectorAll('.slot');
+      let isSolved = true;
+
+      slots.forEach(slot => {
+        const slotIdx = slot.dataset.slotIndex;
+        const pieceIdx = slot.firstElementChild.dataset.originalIndex;
+        if (slotIdx !== pieceIdx) {
+          isSolved = false;
+        }
+      });
+
+      if (isSolved && !document.getElementById('reveal-btn')) {
+        // Create glowing area when complete
+        const glowBtn = document.createElement('button');
+        glowBtn.id = 'reveal-btn';
+        glowBtn.classList.add('glowing-btn');
+        glowBtn.textContent = '✨ Open Secret Message ✨';
+        glowBtn.addEventListener('click', () => {
+          modal.classList.add('active');
+        });
+
+        triggerContainer.appendChild(glowBtn);
+      } else if (!isSolved && document.getElementById('reveal-btn')) {
+        // Remove if user moves a piece after completion
+        triggerContainer.innerHTML = '';
+      }
+    }
+
+    // Modal close controls
+    closeModalBtn.addEventListener('click', () => {
+      modal.classList.remove('active');
+    });
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.remove('active');
+      }
+    });
+  </script>
+</body>
+</html>

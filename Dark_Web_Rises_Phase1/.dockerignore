@@ -1,0 +1,36 @@
+# --- secrets and per-event data: MUST NOT enter the image ---
+.env
+roster_cache.json
+game_state.json
+loadtest/loadtest_game_state.json
+
+# --- host virtualenv: would shadow site-packages and is Windows-built ---
+.venv/
+venv/
+
+# --- caches / editor / VCS ---
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.idea/
+.vscode/
+.DS_Store
+.git/
+.github/
+
+# --- runtime output, regenerated per event ---
+static/generated/
+
+# --- runtime state dir; bind-mounted at runtime, holds credentials ---
+state/
+
+# --- frontend: built separately, not part of the backend image ---
+frontend-fusion/
+
+# --- docs and dev-only tooling ---
+tests/
+tools/
+*.md
+!README.md

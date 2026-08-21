@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Overlapping Draggable Glass Images</title>
+  <style>
+    body {
+      background: #0f172a;
+      min-height: 100vh;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    /* 1000px x 1000px Boundary Box */
+    .canvas-container {
+      width: 1000px;
+      height: 1000px;
+      position: relative;
+      border: 1px dashed rgba(255, 255, 255, 0.2); /* Faint boundary line */
+      background: #1e293b;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    /* Base Glass Image Style */
+    .glass-img {
+      width: 400px;
+      height: auto;
+      position: absolute;
+      cursor: grab;
+      user-select: none;
+
+      /* Translucent Glass Effect */
+      opacity: 0.4;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 12px;
+      
+      transition: transform 0.15s ease, opacity 0.15s ease;
+    }
+
+    /* Initial Positions Inside the 1000px Box */
+    #glass1 {
+      top: 100px;
+      left: 100px;
+      mix-blend-mode: screen;
+    }
+
+    #glass2 {
+      top: 100px;
+      right: 100px;
+      mix-blend-mode: screen;
+    }
+
+    #glass3 {
+      top: 350px;
+      left: 300px;
+      mix-blend-mode: screen;
+    }
+
+    #glass4 {
+      bottom: 100px;
+      left: 100px;
+      mix-blend-mode: screen;
+    }
+
+    #glass5 {
+      bottom: 100px;
+      right: 100px;
+      mix-blend-mode: screen;
+    }
+
+    /* Hover & Active Grab States */
+    .glass-img:hover {
+      opacity: 0.6;
+      transform: scale(1.02);
+    }
+
+    .glass-img:active {
+      cursor: grabbing;
+      opacity: 0.8;
+      transform: scale(1.01);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="canvas-container" id="canvas">
+    
+    <img src="distraction_2.png" alt="Glass Layer 1" class="glass-img" id="glass1" draggable="false" />
+    <img src="distraction_3.png" alt="Glass Layer 2" class="glass-img" id="glass2" draggable="false" />
+    <img src="distraction_1.png" alt="Glass Layer 3" class="glass-img" id="glass3" draggable="false" />
+    <img src="layer_2.png" alt="Glass Layer 4" class="glass-img" id="glass4" draggable="false" />
+    <img src="layer_1.png" alt="Glass Layer 5" class="glass-img" id="glass5" draggable="false" />
+
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const glass1 = document.getElementById('glass1');
+    const glass2 = document.getElementById('glass2');
+    const glass3 = document.getElementById('glass3');
+    const glass4 = document.getElementById('glass4');
+    const glass5 = document.getElementById('glass5');
+
+    const images = [glass1, glass2, glass3, glass4, glass5];
+    let activeImage = null;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    images.forEach(img => {
+      img.addEventListener('mousedown', (e) => {
+        activeImage = img;
+        const rect = img.getBoundingClientRect();
+        
+        // Calculate offset relative to image top-left
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+
+        // Bring the currently grabbed image to the top layer
+        images.forEach(i => i.style.zIndex = '1');
+        img.style.zIndex = '2';
+      });
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!activeImage) return;
+
+      const canvasRect = canvas.getBoundingClientRect();
+
+      // Calculate new position relative to 1000px container
+      let newX = e.clientX - canvasRect.left - offsetX;
+      let newY = e.clientY - canvasRect.top - offsetY;
+
+      // Restrain movement strictly inside the 1000px box limits
+      const maxX = canvas.clientWidth - activeImage.offsetWidth;
+      const maxY = canvas.clientHeight - activeImage.offsetHeight;
+
+      newX = Math.max(0, Math.min(newX, maxX));
+      newY = Math.max(0, Math.min(newY, maxY));
+
+      activeImage.style.left = `${newX}px`;
+      activeImage.style.top = `${newY}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+      activeImage = null;
+    });
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,359 @@
+# Dark Web Rises -- full event stack
+#
+#   dwr      Phase 1: the game backend (FastAPI + websockets + CLIP scoring)
+#   ctfd     Phase 2: CTFd, running the CTF challenges
+#   db       MariaDB, used by CTFd only
+#   cache    Redis, used by CTFd only
+#
+# Host ports:
+#   http://localhost:8000  -> dwr   (game API + websockets)
+#   http://localhost:8080  -> ctfd  (CTF portal)
+#
+# Both CTFd's own compose and this app default to container port 8000, so
+# CTFd is remapped on the host side. Inside the shared network they address
+# each other by service name (http://dwr:8000, http://ctfd:8000) and the
+# clash is irrelevant.
+#
+# Bring it up:   docker compose up -d --build
+# Logs:          docker compose logs -f dwr
+# Tear down:     docker compose down          (add -v to wipe CTFd's data)
+
+services:
+  dwr:
+    build: .
+    image: dark-web-rises:phase1
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      # Not committed -- copy .env.example to .env and fill it in.
+      - .env
+    environment:
+      # Compose-level defaults. Anything set in .env wins over these.
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Every origin the frontend is served from. Without this the browser
+      # blocks the frontend from reaching this API on any non-localhost host.
+      # Origins the browser may call this API from. The default now includes
+      # PUBLIC_HOST (see .env), so setting the LAN IP once covers the frontend
+      # dev server and CTFd without editing this list by hand. Setting
+      # CORS_ALLOWED_ORIGINS explicitly still overrides the whole thing.
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:8080,http://${PUBLIC_HOST:-localhost}:5173,http://${PUBLIC_HOST:-localhost}:8080}
+      # Keep torch from oversubscribing cores and starving the event loop.
+      - TORCH_THREADS_PER_WORKER=${TORCH_THREADS_PER_WORKER:-2}
+      # Write game state and the phase 2 handoff files to the bind-mounted
+      # ./state directory instead of the container's own filesystem.
+      # CRITICAL: at game over the app writes roster_cache_phase2.csv here --
+      # the ONLY plaintext copy of the CTFd team passwords. CTFd stores them
+      # bcrypt-hashed, so if that file is lost after import, every qualified
+      # team is locked out with no way to recover. Left on the container
+      # filesystem it would not survive `docker compose down`.
+      - DWR_STATE_DIR=/app/state
+      # Keep reading the roster cache from its read-only mount below rather
+      # than from the writable state dir.
+      #
+      # Consequence worth being explicit about: because that mount is :ro, the
+      # app CANNOT refresh this file after a successful Supabase fetch --
+      # roster.write_cache() fails with EROFS, logs an error and carries on.
+      # The cache is therefore only ever as fresh as the last time it was
+      # written on the HOST. Refresh it there before the event:
+      #     python tools/roster_build.py refresh
+      #     python tools/roster_build.py check --expect-teams 175
+      - ROSTER_CACHE_FILE=/app/roster_cache.json
+      # How big the event is supposed to be. The app compares the roster it
+      # loaded against these and refuses to start if they disagree.
+      #
+      # This exists because the dangerous roster failure is silent: if Supabase
+      # is unreachable on the morning, the app falls back to the cache above
+      # and boots perfectly on whatever is in it. A stale 150-team cache with
+      # 175 teams in the room produces a clean startup, a green health check,
+      # and 100 attendees who simply cannot log in. Nothing warns. These two
+      # variables turn that into a refusal to start, which is recoverable.
+      #
+      # Deliberately defaulted to EMPTY rather than to 175/700. An unset value
+      # disables the check entirely, so this file cannot make a stack that
+      # boots today stop booting tomorrow -- which is exactly what a default of
+      # 175 would do to any deployment whose roster is not yet at full size.
+      # Opt in from .env once the roster is final:
+      #     EXPECTED_TEAMS=175
+      #     EXPECTED_PLAYERS=700
+      # Runbook step 3 covers it.
+      - EXPECTED_TEAMS=${EXPECTED_TEAMS:-}
+      - EXPECTED_PLAYERS=${EXPECTED_PLAYERS:-}
+      # Where qualified teams are sent at game over, shown on their results
+      # screen. Same PUBLIC_HOST as everything else, for the same reason: this
+      # URL is opened on the player's own device.
+      - PHASE2_CTFD_URL=${PHASE2_CTFD_URL:-http://${PUBLIC_HOST:-localhost}:8080}
+      # Provider credentials, overridable from the shell so a key can be used
+      # without being written into .env.
+      #
+      #     $env:DEEPINFRA_API_KEY = "dxxxx"    # PowerShell, this session only
+      #     docker compose --profile dev up -d
+      #
+      # Precedence is shell > .env > this default, which is the conventional
+      # order and the useful one: an exported value wins, and with nothing
+      # exported the file is used. Both are read at CREATE time and baked into
+      # the container, so the variable has to be set in whichever shell runs
+      # `up -d` -- running it later from a fresh terminal with the variable
+      # unset recreates the container with an empty key, and the app will log
+      # "no image providers are configured" rather than failing loudly.
+      #
+      # An empty value is handled gracefully: is_configured() returns False and
+      # build_chain() drops the provider with a warning naming the variable.
+      - DEEPINFRA_API_KEY=${DEEPINFRA_API_KEY:-}
+      - REPLICATE_API_TOKEN=${REPLICATE_API_TOKEN:-}
+    volumes:
+      # Generated round images, so they survive a container restart mid-event.
+      #
+      # Sizing: 175 teams x 4 turns x 5 rounds = 3500 images, and they are
+      # never deleted. At a typical 150-400 KB per image that is roughly
+      # 0.5-1.4 GB per event, and it accumulates across rehearsals because
+      # nothing clears the volume between runs. Clear it before the real event:
+      #     docker compose down && docker volume rm dark_web_rises_phase1_dwr-generated
+      - dwr-generated:/app/static/generated
+      # The roster cache. Holds plaintext credentials, so it is excluded from
+      # the image by .dockerignore and supplied read-only at runtime instead.
+      # Without this mount the app cannot find a roster and refuses to start.
+      #
+      # Read-only means the app cannot refresh it -- see ROSTER_CACHE_FILE
+      # above. Regenerate it on the host with tools/roster_build.py.
+      - ./roster_cache.json:/app/roster_cache.json:ro
+      # Persistent state: game_state.json checkpoint, roster_cache_phase2.csv
+      # and phase1_scores.json. Bind-mounted (not a named volume) so the
+      # moderator can open the CSV directly from Windows at game over.
+      # Gitignored -- it holds credentials.
+      - ./state:/app/state
+    networks:
+      - event
+    # DO NOT ADD REPLICAS OR EXTRA WORKERS.
+    # Game state is in-process memory. Two instances = players split across
+    # processes that cannot see each other. Scale vertically instead:
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          # Round-end CLIP scoring is the bottleneck: 175 teams finish a round
+          # within the same second, and each one runs a CLIP RN50 encode of its
+          # final image. (The round's reference image is the second encode, but
+          # it is cached across the teams that drew it, so it is close to free
+          # after the first.) At ~45 ms per encode that is ~8 CPU-seconds of
+          # work per round boundary, which 4 cores absorb in about 2 seconds.
+          #
+          # Give it cores, not instances -- see the DO NOT ADD REPLICAS note
+          # above. CLIP_WORKER_THREADS defaults to the CPU count, so raising
+          # this limit is what actually widens the scoring pool.
+          cpus: "4.0"
+          memory: 6G
+
+  # Phase 1's player-facing frontend (TanStack Start + Vite).
+  #
+  # NOT STARTED BY DEFAULT -- it sits behind the `dev` profile:
+  #     docker compose --profile dev up -d
+  # Without the flag, `docker compose up -d` brings up exactly what it did
+  # before this service existed.
+  #
+  # THE PROFILE IS NOT AN ACCIDENT. This runs `vite dev`, which serves modules
+  # unbundled and compiled on demand -- hundreds of requests per page load,
+  # plus an HMR websocket per client. Fine for one developer, questionable in
+  # front of 700 people on a venue wifi. It is here so the whole stack comes up
+  # with one command during setup and rehearsal; measure it before deciding it
+  # is what you want on the day.
+  frontend:
+    build:
+      context: ./frontend-fusion
+      dockerfile: Dockerfile.dev
+    image: dwr-frontend:dev
+    restart: unless-stopped
+    profiles: ["dev"]
+    ports:
+      # Pinned to 5173 because vite.config.ts sets strictPort -- if this moved,
+      # Vite would refuse to start rather than silently pick another port, and
+      # the origin would stop matching CORS_ALLOWED_ORIGINS above.
+      - "5173:5173"
+    environment:
+      # THESE ARE READ BY THE BROWSER, NOT BY THIS CONTAINER.
+      #
+      # Which is the whole trap. A player's phone runs this code, so
+      # `http://localhost:8000` means *the phone*, and `http://dwr:8000` is a
+      # Docker-internal name the phone cannot resolve. Neither works. It has to
+      # be an address reachable from the player's device -- the host's LAN IP.
+      #
+      # Set PUBLIC_HOST once in .env and it lands here, in VITE_CTFD_URL below,
+      # in CORS_ALLOWED_ORIGINS above and in PHASE2_CTFD_URL. Vite gives
+      # process environment precedence over the .env file in frontend-fusion/,
+      # so these win over whatever that file says.
+      - VITE_API_BASE_URL=http://${PUBLIC_HOST:-localhost}:8000
+      - VITE_CTFD_URL=http://${PUBLIC_HOST:-localhost}:8080
+      # Bind-mounted source on Windows and macOS does not deliver inotify
+      # events into a Linux container, so the watcher sees nothing and hot
+      # reload silently stops working. Polling is slower and correct.
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    volumes:
+      # Live source, so edits reload without a rebuild.
+      - ./frontend-fusion:/app
+      # Anonymous volume, and it is load-bearing: without it the bind mount
+      # above would hide the node_modules installed in the image, and on
+      # Windows it would replace them with a Windows-built tree whose native
+      # binaries cannot execute in this Linux container.
+      - /app/node_modules
+    depends_on:
+      - dwr
+    networks:
+      - event
+
+  ctfd:
+    # BUILT FROM PHASE 2's CHECKOUT, NOT PULLED FROM DOCKER HUB.
+    #
+    # This is a fork of CTFd 3.8.6, not stock CTFd. It carries:
+    #   * CTFd/themes/core/templates/scoreboard.html  -- modified template
+    #   * CTFd/themes/core/static/challenge_{1,2,4,5}/ -- the challenge pages
+    #
+    # The published `ctfd/ctfd:3.8.6` image contains none of that, so pulling
+    # it would give you a CTFd whose scoreboard is wrong and whose challenge
+    # links 404. It has to be built from his source.
+    #
+    # Context is the sibling checkout. Adjust if you clone it elsewhere.
+    build:
+      context: ${CTFD_SOURCE_DIR:-../DWR_Phase_2/Dark_Web_Rises}
+    image: dwr-ctfd:phase2
+    restart: unless-stopped
+    ports:
+      - "8080:8000"
+    environment:
+      - UPLOAD_FOLDER=/var/uploads
+      - DATABASE_URL=mysql+pymysql://ctfd:ctfd@db/ctfd
+      - REDIS_URL=redis://cache:6379
+      # Phase 2 is played by the teams that qualified -- about half the field,
+      # so ~88 teams x 4 members = ~350 people hitting CTFd at once, all of
+      # them refreshing the scoreboard and submitting flags.
+      #
+      # WORKERS=1 (the value inherited from Phase 2's own compose file) is one
+      # gunicorn process. The gevent worker class makes that non-blocking, so
+      # it will not fall over -- but greenlets give concurrency, not
+      # parallelism: every flag comparison, template render and scoreboard
+      # query for all 350 users is serialised onto a single CPU core. The
+      # symptom is not an error, it is the whole CTF feeling slow at exactly
+      # the moment everyone is trying to submit.
+      #
+      # More than one worker requires two things, and this stack has both:
+      #   SECRET_KEY  set below, so sessions are valid across workers
+      #               (the entrypoint refuses to start WORKERS>1 without it)
+      #   REDIS_URL   set above, so cache and sessions are shared rather than
+      #               per-process
+      # Without Redis, multiple workers would each hold their own cache and
+      # users would see stale, inconsistent scoreboards depending on which
+      # worker answered.
+      #
+      # Keep this at or below the CPU count allocated to the host.
+      - WORKERS=${CTFD_WORKERS:-4}
+      - LOG_FOLDER=/var/log/CTFd
+      - ACCESS_LOG=-
+      - ERROR_LOG=-
+      - REVERSE_PROXY=true
+      # Signs session cookies. His repo hardcodes one in its own
+      # docker-compose.yml -- a committed secret, so treat it as public and set
+      # a real value in .env here. Rotating it logs everyone out.
+      - SECRET_KEY=${CTFD_SECRET_KEY:-change-me-before-the-event}
+      # Shown as a button on the scoreboard once the CTF's End Time passes.
+      # Leave unset and the "concluded" panel renders without a button rather
+      # than linking somewhere that doesn't exist.
+      - FINAL_LEADERBOARD_URL=${FINAL_LEADERBOARD_URL:-http://localhost:8080/themes/core/static/leaderboard/index.html}
+    volumes:
+      - ctfd-uploads:/var/uploads
+      - ctfd-logs:/var/log/CTFd
+      # Just the leaderboard folder, so `final_leaderboard.py` writing
+      # scores.json on the host shows up immediately -- no rebuild, no
+      # `docker compose cp`, at the one moment you least want either.
+      #
+      # A narrow mount, unlike overlaying all of /opt/CTFd: nothing here needs
+      # an executable bit, so the entrypoint problem that mount caused does
+      # not apply.
+      - ${CTFD_SOURCE_DIR:-../DWR_Phase_2/Dark_Web_Rises}/CTFd/themes/core/static/leaderboard:/opt/CTFd/CTFd/themes/core/static/leaderboard:ro
+      # DO NOT mount the Phase 2 source over /opt/CTFd on Windows.
+      # The image's Dockerfile does `chmod +x /opt/CTFd/docker-entrypoint.sh`
+      # at build time; a Windows bind mount does not carry the executable bit,
+      # so the overlay hides the executable copy and the container dies at
+      # startup with a permission error on the entrypoint.
+      #
+      # To pick up edited challenge pages without a full rebuild, copy just the
+      # changed files into the running container instead:
+      #
+      #   docker compose cp ../DWR_Phase_2/Dark_Web_Rises/CTFd/themes/core/static/challenge_3 \
+      #       ctfd:/opt/CTFd/CTFd/themes/core/static/
+      #
+      # That survives restarts but not `up -d --force-recreate`, so rebuild
+      # properly (`docker compose up -d --build ctfd`) once the pages settle.
+    depends_on:
+      # Conditions, not a bare list. A bare `depends_on` only waits for the
+      # container to be *created*, not for MariaDB to finish initialising, so
+      # CTFd would start, fail to connect, and the entrypoint's `flask db
+      # upgrade` would error out. Its own ping.py retries, so this mostly
+      # showed up as a slow, noisy first boot -- but with a healthcheck the
+      # ordering is actually guaranteed rather than usually fine.
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    networks:
+      - event
+      - internal
+
+  # NOTE: there is deliberately no separate static-file server here.
+  # The challenge pages live at CTFd/themes/core/static/challenge_N/ inside the
+  # Phase 2 fork, so CTFd already serves them itself at
+  #   http://<host>:8080/themes/core/static/challenge_1/vid_player.html
+  # A second nginx would just be a duplicate copy that can drift.
+
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      - MARIADB_ROOT_PASSWORD=ctfd
+      - MARIADB_USER=ctfd
+      - MARIADB_PASSWORD=ctfd
+      - MARIADB_DATABASE=ctfd
+      - MARIADB_AUTO_UPGRADE=1
+    volumes:
+      - ctfd-db:/var/lib/mysql
+    networks:
+      - internal
+    command:
+      - mysqld
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --wait_timeout=28800
+      - --log-warnings=0
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  cache:
+    image: redis:7
+    restart: unless-stopped
+    volumes:
+      - ctfd-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - internal
+
+networks:
+  # Both app services sit here, so CTFd challenges can reach the game backend
+  # at http://dwr:8000 and vice versa.
+  event:
+  # Database and cache are unreachable from outside Docker.
+  internal:
+    internal: true
+
+volumes:
+  dwr-generated:
+  ctfd-uploads:
+  ctfd-logs:
+  ctfd-db:
+  ctfd-redis:

@@ -1,0 +1,40 @@
+.venv/
+__pycache__/
+.idea/
+.DS_Store
+*.pyc
+.env
+game_state.json
+
+# Contains attendee credentials in plain text (GameServer needs the
+# plaintext at boot to hash it). Never commit.
+roster_cache.json
+
+# Written at game over: the CTFd bulk-import CSV (team logins in plain text)
+# and the phase 1 scores carried over with them. Never commit.
+roster_cache_phase2.csv
+phase1_scores.json
+
+# Runtime state dir when running under Docker (DWR_STATE_DIR=/app/state).
+# Holds the checkpoint plus both files above. Never commit.
+state/
+state-archive/
+
+# Generated round images, written at runtime when IMAGE_DELIVERY=url.
+static/generated/
+loadtest/loadtest_game_state.json
+# ---------------------------------------------------------------------
+# Real secrets live in .env and its backups. Only the template is shared.
+# .env.backup-* has held a live SUPABASE_KEY and CTFD_SECRET_KEY.
+.env.*
+!.env.example
+
+# Load-test run output: reports, per-request JSONL and sample images.
+# Regenerable, and the samples are large.
+tools/loadtest-*/
+loadtest/
+
+# Stray scratch image from a provider check.
+tools/first.png
+
+*.log
