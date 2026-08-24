@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Global CTF Leaderboards</title>
+  <style>
+    body {
+      background-color: #121212;
+      color: #e0e0e0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 30px;
+    }
+    h1 {
+      text-align: center;
+      color: #00ffcc;
+      margin-bottom: 10px;
+      font-size: 2.5rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    .generated {
+      text-align: center;
+      color: #707070;
+      font-size: 0.85rem;
+      margin-bottom: 40px;
+    }
+    /* Container to hold the 3 boards side-by-side */
+    .leaderboard-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 30px;
+      justify-content: center;
+    }
+    /* Individual leaderboard boxes */
+    .board {
+      background-color: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 20px;
+      flex: 1;
+      min-width: 300px;
+      max-width: 450px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
+    .board h2 {
+      text-align: center;
+      margin-top: 0;
+      color: #ffffff;
+      border-bottom: 2px solid #00ffcc;
+      padding-bottom: 10px;
+    }
+    /* Table Styling */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    th, td {
+      padding: 12px 10px;
+      text-align: left;
+      border-bottom: 1px solid #333;
+    }
+    th {
+      color: #a0a0a0;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.85rem;
+    }
+    tr:nth-child(even) {
+      background-color: #252525;
+    }
+    tr:hover {
+      background-color: #333333;
+    }
+    .rank {
+      font-weight: bold;
+      color: #00ffcc;
+      width: 40px;
+    }
+    .team-name {
+      font-weight: 600;
+    }
+    .error {
+      text-align: center;
+      color: #ff5555;
+      background: #1e1e1e;
+      border: 1px solid #552222;
+      border-radius: 8px;
+      padding: 20px;
+      max-width: 700px;
+      margin: 30px auto;
+    }
+    .error code {
+      color: #ffcc66;
+    }
+  </style>
+</head>
+<body>
+  <h1>Final Operation Results</h1>
+  <p class="generated" id="generated"></p>
+  <div class="leaderboard-container" id="boards">
+
+    <!-- Phase 1 Board -->
+    <div class="board">
+      <h2>Phase 1</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Team</th>
+            <th>Raw</th>
+            <th>Norm</th>
+          </tr>
+        </thead>
+        <tbody id="phase1-body">
+          <!-- Rows injected by JS -->
+        </tbody>
+      </table>
+    </div>
+    <!-- CTFd Board -->
+    <div class="board">
+      <h2>CTF Phase</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Team</th>
+            <th>Raw</th>
+            <th>Norm</th>
+          </tr>
+        </thead>
+        <tbody id="ctf-body">
+          <!-- Rows injected by JS -->
+        </tbody>
+      </table>
+    </div>
+    <!-- Final Combined Board -->
+    <div class="board">
+      <h2>Combined Overall</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Team</th>
+            <th>Final Score</th>
+          </tr>
+        </thead>
+        <tbody id="combined-body">
+          <!-- Rows injected by JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <script>
+    // Written next to this file by scripts/final_leaderboard.py. Relative so
+    // it works regardless of the host the CTF is served from.
+    // Cache-busted: without it a browser that loaded the page mid-event will
+    // happily serve a stale scores.json from cache after the rerun.
+    const score_path = "scores.json?t=" + Date.now();
+
+    fetch(score_path)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status + " fetching scores.json");
+        }
+        return response.json();
+      })
+      .then(data => {
+        populate_table('phase1-body', data.round1, true);
+        populate_table('ctf-body', data.ctf, true);
+        populate_table('combined-body', data.combined, false);
+        if (data.generated_at) {
+          document.getElementById('generated').textContent =
+            "Generated " + data.generated_at;
+        }
+      })
+      .catch(error => {
+        console.error("Error loading scores:", error);
+        document.getElementById('boards').style.display = 'none';
+        const box = document.createElement('div');
+        box.className = 'error';
+        box.innerHTML =
+          "<strong>Failed to load scores.</strong><br><br>" +
+          "Run <code>python scripts/final_leaderboard.py</code> to generate " +
+          "<code>scores.json</code> next to this page.<br><br>" +
+          "<small>" + String(error) + "</small>";
+        document.body.appendChild(box);
+      });
+
+    function populate_table(tbodyId, teamData, hasRawData) {
+      const tbody = document.getElementById(tbodyId);
+
+      // A missing or empty section shouldn't take the whole page down with a
+      // TypeError -- show the board empty and let the others render.
+      if (!Array.isArray(teamData) || teamData.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = hasRawData ? 4 : 3;
+        td.style.textAlign = 'center';
+        td.style.color = '#707070';
+        td.textContent = 'No data';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
+      }
+
+      teamData.forEach((row, index) => {
+        const tr = document.createElement('tr');
+
+        // textContent, not innerHTML: team names come from CTFd accounts,
+        // which are attacker-controlled in the general case.
+        const rank = document.createElement('td');
+        rank.className = 'rank';
+        rank.textContent = '#' + (index + 1);
+        tr.appendChild(rank);
+
+        const name = document.createElement('td');
+        name.className = 'team-name';
+        name.textContent = row.team;
+        tr.appendChild(name);
+
+        if (hasRawData) {
+          const raw = document.createElement('td');
+          raw.textContent = row.raw_score;
+          tr.appendChild(raw);
+
+          const norm = document.createElement('td');
+          norm.textContent = row.normalized;
+          tr.appendChild(norm);
+        } else {
+          const score = document.createElement('td');
+          score.style.color = '#00ffcc';
+          score.style.fontWeight = 'bold';
+          score.textContent = row.score;
+          tr.appendChild(score);
+        }
+
+        tbody.appendChild(tr);
+      });
+    }
+  </script>
+</body>
+</html>

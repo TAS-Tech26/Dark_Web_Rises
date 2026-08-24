@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dark Web Rises - Game Terminal</title>
+    <style>
+        :root {
+            --bg-color: #0d0e12;
+            --panel-bg: #161822;
+            --accent-color: #00ff66;
+            --danger-color: #ff3333;
+            --text-main: #e2e8f0;
+            --text-muted: #718096;
+            --border-color: #2d3748;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .game-container {
+            width: 100%;
+            max-width: 900px;
+            background-color: var(--panel-bg);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .screen {
+            display: none; /* Controlled via JS */
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        h1, h2, h3, h4 {
+            color: var(--accent-color);
+            margin-top: 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Form UI Elements */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: #fff;
+            font-size: 16px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        button {
+            background-color: var(--accent-color);
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            background-color: var(--border-color);
+            color: var(--text-muted);
+            cursor: not-allowed;
+        }
+
+        .btn-danger {
+            background-color: transparent;
+            color: var(--danger-color);
+            border: 1px solid var(--danger-color);
+        }
+        .btn-danger:hover:not(:disabled) {
+            background-color: var(--danger-color);
+            color: #fff;
+        }
+
+        /* Lobby Display Rules */
+        .lobby-layout {
+            display: grid;
+            grid-template-columns: 1fr 250px;
+            gap: 20px;
+        }
+
+        .panel {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        ul li {
+            padding: 10px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+        }
+        ul li::before {
+            content: "●";
+            color: var(--accent-color);
+            margin-right: 10px;
+            font-size: 12px;
+        }
+
+        /* Core Game Layout Panels */
+        .game-layout {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .game-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 15px;
+        }
+
+        #timer_display {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--danger-color);
+            background: rgba(255, 51, 51, 0.1);
+            padding: 5px 15px;
+            border-radius: 6px;
+            border: 1px solid var(--danger-color);
+        }
+
+        .image-viewport {
+            width: 100%;
+            max-width: 512px;
+            height: auto;
+            min-height: 300px;
+            background-color: #000;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        #game_image {
+            width: 100%;
+            height: auto;
+            display: none;
+        }
+
+        .input-controls {
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        .status-msg {
+            font-size: 18px;
+            font-style: italic;
+            color: var(--text-muted);
+            margin: 15px 0;
+        }
+
+        /* Transitions Modal Overlay */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.85);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: var(--panel-bg);
+            border: 2px solid var(--accent-color);
+            padding: 40px;
+            border-radius: 12px;
+            text-align: center;
+            max-width: 450px;
+            width: 90%;
+            box-shadow: 0 0 20px rgba(0, 255, 102, 0.3);
+        }
+
+        .score-large {
+            font-size: 36px;
+            font-weight: bold;
+            margin: 20px 0;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        
+        <div id="login_screen" class="screen active">
+            <h2>System Authentication</h2>
+            <p style="color: var(--text-muted); margin-bottom: 25px;">Establish link with FastAPI game environment.</p>
+            
+            <div class="form-group">
+                <label for="username_input">Operator Alias</label>
+                <input type="text" id="username_input" placeholder="e.g. user1" autocomplete="off">
+            </div>
+
+            <div class="form-group">
+                <label for="password_input">Access Token Keys</label>
+                <input type="password" id="password_input" placeholder="••••••••">
+            </div>
+
+            <button id="login_button" disabled>Checking System Hook...</button>
+        </div>
+
+        <div id="admin_screen" class="screen">
+            <div class="game-header">
+                <h2>Administrative Overlord Matrix</h2>
+                <button id="admin_logout_button" class="btn-danger">Terminate Session</button>
+            </div>
+            <div class="panel" style="margin-top: 20px;">
+                <h3>Live Matrix Grid Monitor</h3>
+                <div id="admin_grid_display" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-top: 15px;">
+                    <div id="admin_no_teams_msg" style="display: none; grid-column: 1/-1; background: rgba(255,192,0,0.1); border: 1px dashed #ffcc00; padding: 15px; border-radius: 8px; text-align: center;">
+                        <p style="color: #ffcc00; font-weight: bold; margin: 0;">Connected to server, but zero game teams exist yet.</p>
+                        <p style="color: #aaa; margin: 5px 0 0 0; font-size: 13px;">Have your players log in and initialize sessions.</p>
+                    </div>
+                    <div class="panel" style="background: rgba(255,255,255,0.05);">
+                        <h4 style="margin: 0 0 10px 0;">Teams Connected</h4>
+                        <p style="margin: 4px 0; font-size: 20px;"><strong id="stat_connected_teams" style="color: #fff;">--</strong> / <strong id="stat_total_teams" style="color: #fff;">--</strong></p>
+                    </div>
+                    <div class="panel" style="background: rgba(255,255,255,0.05);">
+                        <h4 style="margin: 0 0 10px 0;">Players Online</h4>
+                        <p style="margin: 4px 0; font-size: 20px;"><strong id="stat_players_online" style="color: #fff;">--</strong></p>
+                    </div>
+                    <div class="panel" style="background: rgba(255,255,255,0.05);">
+                        <h4 style="margin: 0 0 10px 0;">Current Round</h4>
+                        <p style="margin: 4px 0; font-size: 20px;"><strong id="stat_current_round" style="color: #fff;">--</strong> / <strong id="stat_total_rounds" style="color: #fff;">--</strong></p>
+                    </div>
+                    <div class="panel" style="background: rgba(255,255,255,0.05);">
+                        <h4 style="margin: 0 0 10px 0;">Game State</h4>
+                        <p style="margin: 4px 0; font-size: 20px;"><strong id="stat_game_state" style="color: #fff;">--</strong></p>
+                    </div>
+                </div>
+            </div>
+            <div class="panel" style="margin-top: 20px; text-align: center; padding: 40px;">
+                <h3>Match State Initialization Controls</h3>
+                <p style="color: var(--text-muted); margin-bottom: 25px;">
+                    Force execution environment countdown sequence across all initialized teams.
+                </p>
+                <button id="run_game_button" style="font-size: 20px; padding: 15px 40px; background-color: #ff3333; color: white;">
+                    🚀 Run Game Match
+                </button>
+                <p id="admin_status_msg" style="margin-top: 15px; font-style: italic; color: var(--accent-color);"></p>
+            </div>
+        </div>
+
+        <div id="lobby_screen" class="screen">
+            <div class="game-header">
+                <h2>Operations Room</h2>
+                <button id="logout_button" class="btn-danger">Disconnect Link</button>
+            </div>
+            <div class="lobby-layout" style="margin-top: 20px;">
+                <div class="panel">
+                    <h3>Deployment Logs</h3>
+                    <div id="lobby_log" style="height: 200px; overflow-y: auto; font-family: monospace; color: var(--text-muted); font-size: 14px;">
+                        <p style="color: var(--accent-color);">[SYSTEM] Safe socket tunnel handshake complete.</p>
+                    </div>
+                </div>
+                <div class="panel">
+                    <h3>Active Roster</h3>
+                    <ul id="roster_list">
+                        </ul>
+                </div>
+            </div>
+        </div>
+
+        <div id="game_screen" class="screen">
+            <div class="game-header">
+                <h2>Neural Interface Matrix</h2>
+                <div id="timer_display">Time: --s</div>
+            </div>
+
+            <div class="game-layout" style="margin-top: 20px;">
+                <div class="image-viewport">
+                    <img id="game_image" src="" alt="Neural Environment Mapping Payload">
+                </div>
+
+                <div class="input-controls">
+                    <div id="spectator_message" class="status-msg">Synchronizing matrix channels...</div>
+                    
+                    <div id="active_turn_controls" style="display: none;">
+                        <p style="color: var(--accent-color); font-weight: bold; margin-bottom: 10px;">YOUR TURN: Mutate the target generation payload structure!</p>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="prompt_input" placeholder="Input structural modification parameters..." autocomplete="off">
+                            <button id="submit_prompt_button">Inject</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="postgame_screen" class="screen">
+            <h2>Operation Evaluation Matrix</h2>
+            <p style="color: var(--text-muted);">All generation operational loops terminated.</p>
+            
+            <div class="panel" id="leaderboard_list" style="margin-top: 20px; font-size: 18px;">
+                </div>
+        </div>
+
+    </div>
+
+    <div id="round_over_overlay" class="modal-overlay">
+        <div class="modal-content">
+            <h2 id="round_over_title">Round Terminated</h2>
+            <div id="round_score_display" class="score-large" style="color: var(--accent-color);">+0.00 pts</div>
+            <div id="total_score_display" style="font-size: 18px; margin-bottom: 25px; color: var(--text-muted);">Total Accumulation: 0 pts</div>
+            <div id="round_countdown" style="font-weight: bold; font-family: monospace;">Next extraction cycle in --s...</div>
+        </div>
+    </div>
+
+    <!-- ui_controller.js already `import`s game_client.js as an ES module,
+         so it does not need its own <script> tag here; loading it twice
+         was harmless (browsers dedupe module fetches by URL) but redundant. -->
+    <script type="module" src="/static/new_client/ui_controller.js"></script>
+</body>
+</html>

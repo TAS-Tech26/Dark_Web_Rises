@@ -1,0 +1,44 @@
+# Vite dev server for the Phase 1 frontend, containerised.
+#
+# DEV ONLY. This runs `vite dev`, which compiles modules on demand and serves
+# them unbundled -- hundreds of separate requests per page load, plus an HMR
+# websocket per connected client. That is exactly what you want while building
+# and exactly what you do not want in front of 700 people. See the note on the
+# `frontend` service in docker-compose.yml before using this on event day.
+#
+# Dependencies are installed at BUILD time rather than on every `up`, so
+# starting the stack does not sit through a two-minute `bun install`. The
+# source is bind-mounted at runtime instead, so edits still hot-reload.
+
+FROM oven/bun:1
+
+WORKDIR /app
+
+# Manifest, lockfile and bunfig only -- so this layer is cached and only
+# rebuilds when dependencies actually change, not on every source edit.
+#
+# bunfig.toml matters here: it sets minimumReleaseAge (a 24h supply-chain
+# guard) and the allowlist that goes with it. Installing without it would
+# resolve a different dependency set than the host does, which is the kind of
+# difference that shows up as "works on my machine" at the worst moment.
+COPY package.json bun.lock bunfig.toml ./
+
+# --frozen-lockfile: fail rather than silently resolving something new. A
+# container that quietly upgrades a dependency the host has pinned is a
+# container that reproduces bugs the host cannot.
+RUN bun install --frozen-lockfile
+
+# Source is NOT copied. docker-compose.yml bind-mounts ./frontend-fusion over
+# /app so edits are live. An anonymous volume on /app/node_modules keeps the
+# modules installed above from being hidden by that mount -- and, on Windows,
+# keeps the host's Windows-built node_modules out of this Linux container,
+# where its native binaries would not run.
+
+EXPOSE 5173
+
+# --host 0.0.0.0 is required, not cosmetic. Vite binds to localhost by
+# default, which inside a container means the container's own loopback: the
+# port would be published and nothing would answer on it. This also happens to
+# be what makes the dev server reachable from a phone on the same wifi, which
+# is how you should be testing this anyway.
+CMD ["bun", "run", "dev", "--host", "0.0.0.0", "--port", "5173"]

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="jumbotron">
+    <div class="container">
+      <h1>
+        {% trans %}Scoreboard{% endtrans %}
+      </h1>
+    </div>
+  </div>
+  <div class="container">
+    {% include "components/errors.html" %}
+
+    {#
+      Once the CTF is over, replace the live scoreboard with a pointer to the
+      combined phase 1 + phase 2 leaderboard.
+
+      `ctf_ended()` is CTFd's own helper (CTFd/utils/dates), exposed as a
+      template global in CTFd/utils/initialization. The earlier check here was
+      `ctf.end < Session.timestamp`, but CTFd has no `ctf` global and Session
+      exposes only id/nonce/hash -- so it was undefined, Jinja treated it as
+      falsy, and this panel could never appear. It failed silently, which is
+      why it looked fine until the CTF actually ended.
+
+      It only ends if an End Time is set at Admin -> Config -> Date & Time.
+      With no end time, ctf_ended() is always False and the live scoreboard
+      shows indefinitely.
+    #}
+    {% if ctf_ended() %}
+
+      <div class="text-center mt-5">
+        <h2>{% trans %}The CTF has concluded.{% endtrans %}</h2>
+        <p class="lead">{% trans %}The final scores are being calculated.{% endtrans %}</p>
+        {# Rendered only when FINAL_LEADERBOARD_URL is set, so we never show a
+           button that leads nowhere. #}
+        {% if final_leaderboard_url %}
+          <a href="{{ final_leaderboard_url }}" class="btn btn-success btn-lg mt-3">
+            {% trans %}View Leaderboard{% endtrans %}
+          </a>
+        {% endif %}
+      </div>
+
+    {% else %}
+      
+      <!-- Standard CTFd Scoreboard rendering (Hidden after end) -->
+      <div id="score-graph" class="align-items-center" :class="{'d-flex': show, 'd-none': !show}" x-data="ScoreboardDetail" x-ref="scoregraph" @bracket-change.window="activeBracket=$event.detail; update();">
+        <div class="col-md-12 text-center">
+          <i class="fas fa-circle-notch fa-spin fa-3x fa-fw spinner"></i>
+        </div>
+      </div>
+
+      <div id="scoreboard" class="row" x-data="ScoreboardList">
+        <template x-if="brackets.length && standings.length">
+          <div class="col-md-12 py-3">
+            <nav class="nav nav-pills nav-fill">
+              <button :class="{'nav-link': true, 'active': !activeBracket}" @click="activeBracket=null">{% trans %}All{% endtrans %}</button>
+              <template x-for="bracket in brackets">
+                <button :class="{'nav-link': true, 'active': activeBracket == bracket.id}" x-text="bracket.name" @click="activeBracket=bracket.id"></button>
+              </template>
+            </nav>
+          </div>
+        </template>
+
+        <div class="col-md-12" x-show="standings.length">
+          <table class="table table-striped align-middle">
+            <thead>
+            <tr>
+              <th style="width: 10px">{% trans %}Place{% endtrans %}</th>
+              <th class="text-start ps-3">{{ get_mode_as_word(capitalize=True) }}</th>
+              <th>{% trans %}Score{% endtrans %}</th>
+            </tr>
+            </thead>
+
+            <tbody>
+              <template x-for="(standing, index) in standings.filter(i => activeBracket ? i.bracket_id==activeBracket : true)">
+                <tr>
+                  <th scope="row" class="text-center" x-text="index + 1"></th>
+                  <td class="text-start">
+                    <a :href="standing.account_url" x-text="standing.name"></a>
+                    <template x-if="standing.bracket_name">
+                      <span class="badge bg-secondary ms-2" x-text="standing.bracket_name"></span>
+                    </template>
+                  </td>
+                  <td x-text="standing.score"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="col-md-12" x-show="! standings.length">
+          <h3 class="text-center text-muted">{% trans %}Scoreboard is empty{% endtrans %}</h3>
+        </div>
+      </div>
+      
+    {% endif %}
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  {{ Assets.js("assets/js/scoreboard.js") }}
+{% endblock %}

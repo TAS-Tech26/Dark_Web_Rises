@@ -1,0 +1,35 @@
+# Build context for the `frontend` service in ../docker-compose.yml.
+#
+# Without this file, `docker build` uploads the whole directory to the daemon
+# before running a single instruction -- including node_modules, which on a
+# project this size is hundreds of megabytes and is about to be reinstalled
+# inside the image anyway.
+#
+# node_modules is also actively harmful to copy on Windows: the host tree is
+# built for Windows, and its native binaries cannot execute in a Linux
+# container. Excluding it here and mounting an anonymous volume over
+# /app/node_modules at runtime (see docker-compose.yml) keeps the two apart.
+node_modules/
+
+# Version control and editor state.
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+
+# Build output and framework caches -- regenerated inside the container.
+dist/
+.output/
+.nitro/
+.vinxi/
+.tanstack/
+.lovable/
+*.log
+
+# The dev server reads its VITE_* values from the process environment, which
+# compose supplies from PUBLIC_HOST. Baking this file into the image would
+# ship whatever host address happened to be in it at build time.
+.env
+.env.local
+.env.*.local

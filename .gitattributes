@@ -1,0 +1,37 @@
+﻿# Normalise line endings to LF in the repository. Checkouts still get
+# whatever the platform wants; what changes is that a CRLF flip stops being
+# a diff. Set on a fresh tree, so there is nothing to renormalise.
+* text=auto eol=lf
+
+# These run inside Linux containers. A CRLF here is not cosmetic - it gives
+# you "bad interpreter: /bin/sh^M" at container start.
+*.sh    text eol=lf
+*.bash  text eol=lf
+Dockerfile*          text eol=lf
+docker-entrypoint.sh text eol=lf
+
+# Windows-only helpers stay CRLF.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never converted, never diffed as text.
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.gif -text
+*.ico -text
+*.webp -text
+*.pdf -text
+*.zip -text
+*.gz -text
+*.mp4 -text
+*.webm -text
+*.mp3 -text
+*.db -text
+*.sqlite -text
+*.woff -text
+*.woff2 -text
+*.ttf -text
+*.eot -text
+*.mo -text

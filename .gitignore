@@ -1,0 +1,66 @@
+﻿# ======================================================================
+# NEVER COMMIT
+# ======================================================================
+
+# Full CTFd database export. db/flags.json holds every challenge flag in
+# plaintext, db/config.json holds mail_username and mail_password, and there
+# is an API token plus password hashes beside them. Keep it on disk and
+# re-import it into CTFd by hand.
+ctf-export/
+dwr_ctf*.zip
+
+# Live database volume: the running CTF's flags, accounts and solves.
+.data/
+
+# Real configuration - only templates are shared. Each phase already
+# gitignores its own .env; a leaked key should not be defended by exactly
+# one line in exactly one file.
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Attendee credentials in plaintext. roster_cache.json is what the server
+# hashes at boot; roster_cache_phase2.csv is the CTFd bulk-import file with
+# team logins in the clear.
+roster_cache*.json
+roster_cache_phase2.csv
+phase1_scores.json
+
+# ======================================================================
+# RUNTIME STATE - regenerated, never shared
+# ======================================================================
+state/
+state-archive/
+game_state.json
+static/generated/
+tools/loadtest-*/
+loadtest/
+*.log
+
+# ======================================================================
+# BUILD ARTEFACTS AND EDITOR NOISE
+# ======================================================================
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+node_modules/
+dist/
+build/
+.cache/
+.output/
+.nitro/
+.tanstack/
+.turbo/
+
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

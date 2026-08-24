@@ -1,0 +1,48 @@
+# --- secrets and per-event data: MUST NOT enter the image ---
+# `COPY . .` in the Dockerfile takes the whole build context, so anything not
+# excluded here ends up readable by `docker save` or a shell in the container.
+.env
+# .env alone was not enough: .gitignore documents that `.env.backup-*` has held
+# a live SUPABASE_KEY and CTFD_SECRET_KEY, and those were being baked in.
+.env.*
+!.env.example
+roster_cache.json
+game_state.json
+loadtest/loadtest_game_state.json
+# Archived copies of roster_cache_phase2.csv -- the ONLY plaintext copy of every
+# qualified team's CTFd password. state/ was excluded below; this was not.
+state-archive/
+# Regenerable, and the image samples are large.
+loadtest/
+*.log
+
+# --- host virtualenv: would shadow site-packages and is Windows-built ---
+.venv/
+venv/
+
+# --- caches / editor / VCS ---
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.idea/
+.vscode/
+.DS_Store
+.git/
+.github/
+
+# --- runtime output, regenerated per event ---
+static/generated/
+
+# --- runtime state dir; bind-mounted at runtime, holds credentials ---
+state/
+
+# --- frontend: built separately, not part of the backend image ---
+frontend-fusion/
+
+# --- docs and dev-only tooling ---
+tests/
+tools/
+*.md
+!README.md

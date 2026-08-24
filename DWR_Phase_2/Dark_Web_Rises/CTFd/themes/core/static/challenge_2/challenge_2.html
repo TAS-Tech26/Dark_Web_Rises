@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Analysis Challenge</title>
+  <style>
+    body {
+      background-color: #212529; 
+      color: #f8f9fa;
+      font-family: sans-serif;
+      margin: 0;
+      padding: 40px 20px;
+    }
+
+    /* Layout Wrapper */
+    .layout-wrapper {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 40px;
+      max-width: 1000px; 
+      margin: 0 auto;
+    }
+
+    /* Left Column (Image & Info Box) */
+    .left-column { 
+      flex: 1; 
+      max-width: 500px; 
+      text-align: center; 
+    }
+    
+    .left-column h3 {
+      margin-top: 0;
+      color: #f8f9fa;
+    }
+
+    .challenge-image { 
+      width: 100%; 
+      height: auto; 
+      border-radius: 8px; 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+      cursor: crosshair; /* Gives the user a hint to interact with it */
+    }
+
+    /* The Info Box (Appears below the image) */
+    .info-box {
+      display: none; /* Hidden until an option is clicked */
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #1c1e22;
+      border: 1px solid #444;
+      border-radius: 6px;
+      text-align: left;
+      font-family: monospace; /* Gives it a terminal/data look */
+      color: #00ff00;
+    }
+
+    /* Right Column (Text Description) */
+    .right-column {
+      flex: 1;
+      max-width: 400px;
+      background-color: #2c3034;
+      padding: 25px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      line-height: 1.6;
+    }
+    
+    .right-column h2 {
+      margin-top: 0;
+      color: #00a8ff;
+    }
+
+    /* Custom Right-Click Context Menu */
+    .context-menu {
+      position: absolute;
+      display: none; /* Hidden by default */
+      background-color: #2b2b2b;
+      border: 1px solid #555;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+      border-radius: 4px;
+      padding: 5px 0;
+      min-width: 180px;
+      z-index: 1000;
+      list-style-type: none;
+      margin: 0;
+    }
+
+    .context-menu li {
+      padding: 10px 15px;
+      cursor: pointer;
+      font-size: 14px;
+      color: #eee;
+    }
+
+    .context-menu li:hover {
+      background-color: #007bff;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="layout-wrapper">
+    
+    <!-- LEFT COLUMN: Title, Image, and Info Box -->
+    <div class="left-column">
+      <h3> patient_case_profile.png</h3>
+      <!-- Replace 'your_image.jpg' with your actual image path -->
+      <img src="ferrir.png" alt="Target Schematic" class="challenge-image" id="target-img">
+      
+      <!-- The dynamic info box below the image -->
+      <div class="info-box" id="info-box">
+        <!-- Content gets injected here via JavaScript -->
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN: Lore and Description -->
+    <div class="right-column">
+      <h2>Briefing</h2>
+      <p>
+        A perfect story is a curated delusion; it only shows you what it wants you to see. 
+        True insight requires looking beneath the canvas to examine the file's digital skeleton. 
+        Force the system to read this case profile's internal details and properties.  
+      </p>
+      <p>
+        Hidden deep within the clinician's background log tags, you will harvest the 4-digit secret year code that initiated the lie. 
+        Input that year to open the case file.
+      </p>
+    </div>
+
+  </div>
+
+  <!-- THE CUSTOM CONTEXT MENU (Hidden until right-click) -->
+  <ul class="context-menu" id="custom-menu">
+    <li onclick="showInfo('view')">View Full Resolution</li>
+    <li onclick="showInfo('save')">Save Image As...</li>
+    <li onclick="showInfo('properties')">Image Properties</li>
+  </ul>
+
+  <script>
+    const targetImg = document.getElementById('target-img');
+    const customMenu = document.getElementById('custom-menu');
+    const infoBox = document.getElementById('info-box');
+
+
+    targetImg.addEventListener('contextmenu', function(e) {
+      e.preventDefault(); 
+      
+    
+      customMenu.style.top = `${e.pageY}px`;
+      customMenu.style.left = `${e.pageX}px`;
+      customMenu.style.display = 'block';
+    });
+
+    document.addEventListener('click', function(e) {
+      if (e.target !== targetImg) {
+        customMenu.style.display = 'none';
+      }
+    });
+
+
+    function showInfo(action) {
+
+      customMenu.style.display = 'none';
+
+      infoBox.style.display = 'block';
+
+      if (action === 'properties') {
+        infoBox.innerHTML = `
+          <strong>File Properties:</strong><br><br>
+          Item Type: PNG File<br>
+          Name: patient_case_profile.png<br>
+          Dimensions: 1920x1080<br>
+          Horizontal Resolution: 96 dpi<br>
+          Vertical Resolution: 96 dpi<br>
+          Bit depth: 32<br>
+          Color Space: RGB<br>
+          Location Data: 12.9796° N, 77.5906° W<br><br>
+          <strong>Metadata:</strong><br>
+          Size: 44,86,886 bytes<br>
+          Size on disk: 44,89,216 bytes<br>
+          Attributes: [Read Only, Hidden]<br>
+          Date created: 06/07/1984<br>
+          Date modified: 13/11/1984<br>
+        `;
+      } else if (action === 'view') {
+        infoBox.innerHTML = `
+          <strong>Error:</strong><br>
+          Full resolution rendering is restricted by the current clearance level.
+        `;
+      } else if (action === 'save') {
+        infoBox.innerHTML = `
+          <strong>Action Blocked:</strong><br>
+          File downloads have been temporarily disabled by the system administrator to prevent data leaks.
+        `;
+      }
+    }
+  </script>
+</body>
+</html>

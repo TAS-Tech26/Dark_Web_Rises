@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Case File #204 - Patient Statements</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --border-color: #30363d;
+            --accent-blue: #58a6ff;
+            --accent-green: #2ea043;
+            --accent-red: #da3633;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            text-align: center;
+            max-width: 800px;
+            margin-bottom: 40px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 20px;
+        }
+
+        h1 { color: var(--accent-blue); margin-bottom: 10px; }
+
+        .container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            width: 100%;
+            max-width: 1000px;
+        }
+
+        .suspect-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 24px;
+            text-align: center;
+        }
+
+        button {
+            background-color: #21262d;
+            color: var(--accent-blue);
+            border: 1px solid var(--border-color);
+            padding: 10px 18px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 15px;
+        }
+
+        button:hover { background-color: var(--accent-blue); color: #0d1117; }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.75);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 28px;
+            max-width: 500px;
+            width: 90%;
+            position: relative;
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 15px; right: 20px;
+            color: var(--text-secondary);
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        textarea {
+            width: 100%;
+            height: 90px;
+            background: #0d1117;
+            color: var(--accent-blue);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px;
+            box-sizing: border-box;
+            font-family: monospace;
+            margin-top: 10px;
+            resize: none;
+        }
+
+        .verification-section {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px dashed var(--border-color);
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .input-group input {
+            flex: 1;
+            background: #0d1117;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px;
+            color: var(--text-primary);
+        }
+
+        .submit-btn {
+            width: auto;
+            background-color: var(--accent-blue);
+            color: #0d1117;
+            margin-top: 0;
+        }
+
+        /* Flag Box Styles */
+        .flag-box {
+            display: none;
+            margin-top: 15px;
+            padding: 12px;
+            background: rgba(46, 160, 67, 0.15);
+            border: 1px solid var(--accent-green);
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .flag-box code {
+            font-family: monospace;
+            font-size: 1.1em;
+            color: var(--accent-green);
+            display: block;
+            margin: 8px 0;
+            word-break: break-all;
+        }
+
+        .copy-btn {
+            background-color: var(--accent-green);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: auto;
+            margin-top: 5px;
+            font-size: 0.85em;
+        }
+
+        .status-error { color: var(--accent-red); margin-top: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>INVESTIGATION FILE #204</h1>
+        <p>Analyse patient statements for environmental or logical flaws. Identify the bulletproof account.</p>
+    </header>
+
+    <div class="container">
+        <div class="suspect-card">
+            <h2>Patient A (Leo)</h2>
+            <button onclick="openModal('leo')">Examine Profile</button>
+        </div>
+
+        <div class="suspect-card">
+            <h2>Patient B (Maya)</h2>
+            <button onclick="openModal('maya')">Examine Profile</button>
+        </div>
+
+        <div class="suspect-card">
+            <h2>Patient C (Chloe)</h2>
+            <button onclick="openModal('chloe')">Examine Profile</button>
+        </div>
+    </div>
+
+    <div id="statementModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h3 id="modalName" style="margin-top:0;">Patient Log</h3>
+            <label for="statementBox">Interview Transcript:</label>
+            <textarea id="statementBox" readonly></textarea>
+
+            <div class="verification-section">
+                <label for="flagInput"><strong>Verify Patient Status:</strong></label>
+                <div class="input-group">
+                    <input type="text" id="flagInput" placeholder="Enter keyword..." autocomplete="off">
+                    <button class="submit-btn" onclick="verifyFlag()">Verify</button>
+                </div>
+                
+                <div id="errorMessage" class="status-error"></div>
+
+                <div id="flagBox" class="flag-box">
+                    <span>✓ Verification Successful! Here is your flag:</span>
+                    <code id="flagText"></code>
+                    <button class="copy-btn" onclick="copyFlag()">Copy Flag to Clipboard</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSuspect = '';
+
+        // Target secret word and flag definition
+        const SECRET_WORD = "alibi";
+        const CTF_FLAG = "CTF{alibi_deduction_complete_2026}";
+
+        const profiles = {
+            leo: {
+                name: "Patient A (Leo)",
+                transcript: "\"I went for a long walk to clear my head. I left my house just as the sun was setting beautifully in the East, and walked for two hours.\""
+            },
+            maya: {
+                name: "Patient B (Maya)",
+                transcript: "\"I was miles away at the convenience store. I remember driving North up the highway at 3:00 PM, and the blinding afternoon sun was hitting me directly in the rearview mirror.\""
+            },
+            chloe: {
+                name: "Patient C (Chloe)",
+                transcript: "\"I was home baking all afternoon. I put my timer on for 45 minutes, but I accidentally fell asleep for an hour. Luckily, my smoke detector started blaring and woke me up just in time to pull the burnt food out.\""
+            }
+        };
+
+        function openModal(key) {
+            currentSuspect = key;
+            document.getElementById('modalName').innerText = profiles[key].name;
+            document.getElementById('statementBox').value = profiles[key].transcript;
+            document.getElementById('flagInput').value = '';
+            document.getElementById('errorMessage').innerText = '';
+            document.getElementById('flagBox').style.display = 'none';
+            document.getElementById('statementModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('statementModal').style.display = 'none';
+        }
+
+        function verifyFlag() {
+            const inputVal = document.getElementById('flagInput').value.trim().toLowerCase();
+            const errorDiv = document.getElementById('errorMessage');
+            const flagBox = document.getElementById('flagBox');
+
+            errorDiv.innerText = "";
+            flagBox.style.display = "none";
+
+            // Pure Client-Side Logic Check
+            if (currentSuspect === 'chloe' && inputVal === SECRET_WORD) {
+                document.getElementById('flagText').innerText = CTF_FLAG;
+                flagBox.style.display = "block";
+            } else {
+                errorDiv.innerText = "✗ Verification failed. Incorrect logical deduction.";
+            }
+        }
+
+        function copyFlag() {
+            const flagText = document.getElementById('flagText').innerText;
+            navigator.clipboard.writeText(flagText).then(() => {
+                alert("Flag copied to clipboard!");
+            });
+        }
+
+        window.onclick = function(event) {
+            const modal = document.getElementById('statementModal');
+            if (event.target === modal) closeModal();
+        }
+    </script>
+</body>
+</html>
