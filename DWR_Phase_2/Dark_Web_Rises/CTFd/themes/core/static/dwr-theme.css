@@ -1,0 +1,280 @@
+/* ======================================================================
+   Dark Web Rises — Phase 2 challenge theme
+   ----------------------------------------------------------------------
+   Mirrors the Phase 1 design system (frontend-fusion/src/styles.css) so
+   the CTF reads as the same event rather than a different product.
+
+   Tokens are the SAME oklch values Phase 1 uses, each preceded by a hex
+   fallback for anything that predates oklch support. Do not "simplify"
+   the pairs away -- the hex line is the fallback, the oklch line is the
+   real value, and a browser that understands the second ignores the first.
+
+   SCOPE, and this matters:
+   This file styles CHROME ONLY -- page background, panels, headings,
+   buttons, tables. Every rule a puzzle depends on stays inline in its own
+   challenge file, so a player who downloads a single .html and opens it
+   without this stylesheet still gets a working (if plain) challenge.
+   Nothing here may set colour, opacity, blend mode, visibility or
+   geometry on a puzzle element.
+
+   Linked from each challenge as ../dwr-theme.css -- all eight pages sit
+   exactly one directory below this one.
+   ====================================================================== */
+
+:root {
+  --background: #050911;
+  --background: oklch(0.14 0.02 260);
+  --foreground: #eef4ed;
+  --foreground: oklch(0.96 0.01 140);
+  --surface: #0b121d;
+  --surface: oklch(0.18 0.025 260);
+  --surface-elevated: #131b29;
+  --surface-elevated: oklch(0.22 0.03 262);
+
+  --neon: #73fb50;
+  --neon: oklch(0.88 0.24 140);
+  --neon-foreground: #03060d;
+  --neon-foreground: oklch(0.12 0.02 260);
+  --magenta: #ff30d3;
+  --magenta: oklch(0.7 0.28 340);
+  --cyan: #00dbff;
+  --cyan: oklch(0.82 0.16 220);
+  --warning: #fcb700;
+  --warning: oklch(0.82 0.19 85);
+  --success: #00db7c;
+  --success: oklch(0.78 0.2 155);
+  --destructive: #ff0e30;
+  --destructive: oklch(0.65 0.26 25);
+
+  --border: #202938;
+  --border: oklch(0.28 0.03 260);
+  --muted-foreground: #8e9aa4;
+  --muted-foreground: oklch(0.68 0.02 240);
+  --grid: #171f2e;
+  --grid: oklch(0.24 0.03 260);
+
+  --radius: 0.5rem;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+/* ---------------------------------------------------------------- page */
+
+html {
+  background-color: var(--background);
+}
+
+body {
+  margin: 0;
+  padding: 40px 24px 64px;
+  min-height: 100vh;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The two ambient washes from Phase 1's body, plus its 48px grid. Fixed
+   and behind everything, so it never composites with page content --
+   challenge_6 blends its layers against a flat backdrop and would break
+   if the grid sat underneath them. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% -10%, color-mix(in oklab, var(--neon) 12%, transparent), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, color-mix(in oklab, var(--magenta) 10%, transparent), transparent 60%);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image:
+    linear-gradient(to right, var(--grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 40%, transparent 100%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 40%, transparent 100%);
+}
+
+::selection {
+  background: color-mix(in oklab, var(--neon) 40%, transparent);
+  color: var(--neon-foreground);
+}
+
+/* --------------------------------------------------------- typography */
+
+h1, h2, h3, h4 {
+  font-family: var(--font-mono);
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+  margin: 0 0 0.5em;
+}
+
+h1 {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+}
+
+a { color: var(--cyan); }
+
+code, pre, .mono { font-family: var(--font-mono); }
+
+/* Phase 1's "// lowercase" micro-label, above every title. */
+.dwr-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  color: var(--muted-foreground);
+  margin-bottom: 6px;
+}
+
+.dwr-accent { color: var(--neon); text-shadow: 0 0 12px color-mix(in oklab, var(--neon) 60%, transparent); }
+.dwr-magenta { color: var(--magenta); text-shadow: 0 0 12px color-mix(in oklab, var(--magenta) 60%, transparent); }
+.dwr-muted { color: var(--muted-foreground); }
+
+/* ------------------------------------------------------------- layout */
+
+.dwr-shell {
+  position: relative;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.dwr-header {
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dwr-header p {
+  color: var(--muted-foreground);
+  margin: 8px 0 0;
+  max-width: 70ch;
+}
+
+/* ------------------------------------------------------------- panels */
+
+.dwr-panel {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+}
+
+.dwr-panel--elevated { background-color: var(--surface-elevated); }
+.dwr-panel--neon    { border-color: color-mix(in oklab, var(--neon) 40%, var(--border));
+                      box-shadow: 0 0 24px color-mix(in oklab, var(--neon) 18%, transparent); }
+.dwr-panel--magenta { border-color: color-mix(in oklab, var(--magenta) 40%, var(--border));
+                      box-shadow: 0 0 24px color-mix(in oklab, var(--magenta) 18%, transparent); }
+
+.dwr-panel h2, .dwr-panel h3 { margin-top: 0; }
+
+/* ------------------------------------------------------------ buttons */
+
+.dwr-btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  padding: 11px 20px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in oklab, var(--neon) 45%, var(--border));
+  background-color: color-mix(in oklab, var(--neon) 10%, transparent);
+  color: var(--neon);
+  cursor: pointer;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+}
+
+.dwr-btn:hover {
+  background-color: color-mix(in oklab, var(--neon) 22%, transparent);
+  box-shadow: 0 0 20px color-mix(in oklab, var(--neon) 30%, transparent);
+}
+
+.dwr-btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+
+.dwr-btn--solid {
+  background-color: var(--neon);
+  color: var(--neon-foreground);
+  border-color: var(--neon);
+}
+.dwr-btn--solid:hover { background-color: var(--neon); filter: brightness(1.08); }
+
+.dwr-btn--ghost {
+  border-color: var(--border);
+  background-color: transparent;
+  color: var(--muted-foreground);
+}
+.dwr-btn--ghost:hover { color: var(--foreground); background-color: color-mix(in oklab, var(--foreground) 8%, transparent); }
+
+/* --------------------------------------------------- inputs & selects */
+
+.dwr-input, .dwr-select, .dwr-textarea {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  background-color: var(--background);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  box-sizing: border-box;
+}
+
+.dwr-input:focus, .dwr-select:focus, .dwr-textarea:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--neon) 55%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--neon) 15%, transparent);
+}
+
+.dwr-textarea { resize: none; line-height: 1.5; }
+
+/* ------------------------------------------------------------- tables */
+
+.dwr-table { width: 100%; border-collapse: collapse; }
+
+.dwr-table th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--muted-foreground);
+  text-align: left;
+  font-weight: 600;
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dwr-table td {
+  padding: 11px 10px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+}
+
+.dwr-table tbody tr:hover { background-color: color-mix(in oklab, var(--foreground) 4%, transparent); }
+
+/* --------------------------------------------------------- status bar */
+
+.dwr-note {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  background-color: var(--surface);
+}
+
+.dwr-note--ok    { border-color: color-mix(in oklab, var(--success) 45%, var(--border)); color: var(--success); }
+.dwr-note--warn  { border-color: color-mix(in oklab, var(--warning) 45%, var(--border)); color: var(--warning); }
+.dwr-note--error { border-color: color-mix(in oklab, var(--destructive) 45%, var(--border)); color: var(--destructive); }

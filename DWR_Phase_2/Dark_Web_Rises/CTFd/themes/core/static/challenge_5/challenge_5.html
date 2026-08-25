@@ -3,41 +3,97 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hidden Text Challenge</title>
-  <style>
-    body {
-      background-color: #212529; 
-      color: #f8f9fa; 
-      font-family: monospace;
-      padding: 40px;
-      text-align: center;
-      font-size: 20px;
-    }
+  <title>The Physical Echo — Field Note</title>
 
-    .log-box {
-      background-color: #1c1e22;
-      border: 1px solid #444;
-      border-radius: 8px;
-      padding: 30px;
-      max-width: 600px;
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" media="print" onload="this.media='all'"
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Space+Grotesk:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="../dwr-theme.css">
+
+  <style>
+    /* No puzzle-critical CSS in this challenge -- the content is the
+       challenge. Everything below is presentation only. */
+
+    .note-body {
+      max-width: 640px;
       margin: 0 auto;
     }
 
+    .note-body p {
+      color: var(--muted-foreground);
+      font-size: 15px;
+    }
+
+    .directive {
+      margin-top: 20px;
+      padding-top: 18px;
+      border-top: 1px dashed var(--border);
+    }
+
+    .directive strong {
+      color: var(--foreground);
+      font-weight: 600;
+    }
+
+    .coords {
+      margin-top: 24px;
+      padding: 16px;
+      border: 1px solid color-mix(in oklab, var(--cyan) 40%, var(--border));
+      border-radius: var(--radius);
+      background-color: color-mix(in oklab, var(--cyan) 6%, transparent);
+      font-family: var(--font-mono);
+      font-size: 17px;
+      letter-spacing: 0.08em;
+      color: var(--cyan);
+      text-align: center;
+      user-select: all;
+    }
+
+    .coords-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--muted-foreground);
+      text-align: center;
+      margin-bottom: 8px;
+    }
   </style>
 </head>
 <body>
 
-  <div class="layout-wrapper">
-    <div class="log-box">
-      <h2>The Physical Echo</h2>
-      <p>Stand before the grand white pillars of power. Pivot 180° away from the columns. 
-        Peer through the street's digital lens to the massive crimson facade directly across the road.</p>
+  <div class="dwr-shell">
 
-      <p>Find the product: Imposing Front Columns × White Arched Portals nestled behind them on that central block.</p>
-
-      <p>12.9786306,77.5917667</p>
-      
+    <div class="dwr-header">
+      <div class="dwr-eyebrow">// field note · surveillance log</div>
+      <h1>The Physical <span class="dwr-accent">Echo</span></h1>
+      <p>Recovered street-level observation.</p>
     </div>
+
+    <div class="note-body">
+      <div class="dwr-panel dwr-panel--elevated">
+        <div class="dwr-eyebrow">// observer instructions</div>
+
+        <p>
+          Stand before the grand white pillars of power. Pivot 180° away from the
+          columns. Peer through the street's digital lens to the massive crimson facade
+          directly across the road.
+        </p>
+
+        <div class="directive">
+          <p>
+            Find the product:
+            <strong>Imposing Front Columns</strong> ×
+            <strong>White Arched Portals</strong>
+            nestled behind them on that central block.
+          </p>
+        </div>
+
+        <div class="coords-label">// last known coordinates</div>
+        <div class="coords">12.9786306,77.5917667</div>
+      </div>
+    </div>
+
   </div>
 
 </body>

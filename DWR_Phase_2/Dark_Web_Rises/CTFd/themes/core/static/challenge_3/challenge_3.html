@@ -3,117 +3,126 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Case File #204 - Patient Statements</title>
+    <title>Case File #204 — Patient Statements</title>
+
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" media="print" onload="this.media='all'"
+          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Space+Grotesk:wght@400;500;700&display=swap">
+    <link rel="stylesheet" href="../dwr-theme.css">
+
     <style>
-        :root {
-            --bg-color: #0d1117;
-            --card-bg: #161b22;
-            --border-color: #30363d;
-            --accent-blue: #58a6ff;
-            --accent-green: #2ea043;
-            --accent-red: #da3633;
-            --text-primary: #c9d1d9;
-            --text-secondary: #8b949e;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-primary);
-            margin: 0;
-            padding: 30px 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        header {
-            text-align: center;
-            max-width: 800px;
-            margin-bottom: 40px;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 20px;
-        }
-
-        h1 { color: var(--accent-blue); margin-bottom: 10px; }
-
-        .container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 24px;
-            width: 100%;
-            max-width: 1000px;
-        }
-
-        .suspect-card {
-            background-color: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 24px;
-            text-align: center;
-        }
-
-        button {
-            background-color: #21262d;
-            color: var(--accent-blue);
-            border: 1px solid var(--border-color);
-            padding: 10px 18px;
-            font-weight: 600;
-            border-radius: 6px;
-            cursor: pointer;
-            width: 100%;
-            margin-top: 15px;
-        }
-
-        button:hover { background-color: var(--accent-blue); color: #0d1117; }
-
+        /* ================================================================
+           PUZZLE-CRITICAL — DO NOT CHANGE
+           ----------------------------------------------------------------
+           .modal and .flag-box must start display:none. The script sets
+           .modal to 'flex' and .flag-box to 'block'; a flag box that is
+           visible before verification hands out CTF_FLAG on page load.
+           ================================================================ */
         .modal {
             display: none;
             position: fixed;
             top: 0; left: 0;
             width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.75);
             justify-content: center;
             align-items: center;
             z-index: 1000;
         }
 
+        .flag-box {
+            display: none;
+        }
+        /* =============== END PUZZLE-CRITICAL =========================== */
+
+        .briefing {
+            margin-bottom: 24px;
+        }
+
+        .briefing h2 { font-size: 1.25rem; margin-bottom: 10px; }
+
+        .briefing p {
+            color: var(--muted-foreground);
+            font-size: 15px;
+            margin: 0;
+            max-width: 78ch;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+        }
+
+        .suspect-card { text-align: center; }
+
+        .suspect-card h2 {
+            font-size: 1.1rem;
+            margin-bottom: 4px;
+        }
+
+        .suspect-card .role {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: var(--muted-foreground);
+            margin-bottom: 18px;
+        }
+
+        .suspect-card .dwr-btn { width: 100%; }
+
+        /* Modal chrome. The display rules above are what matter. */
+        .modal {
+            background: color-mix(in oklab, var(--background) 82%, transparent);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
+
         .modal-content {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 10px;
-            padding: 28px;
-            max-width: 500px;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 26px;
+            max-width: 520px;
             width: 90%;
             position: relative;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
         }
 
         .close-btn {
             position: absolute;
-            top: 15px; right: 20px;
-            color: var(--text-secondary);
+            top: 12px; right: 16px;
+            background: none;
+            border: none;
+            color: var(--muted-foreground);
             font-size: 24px;
+            line-height: 1;
             cursor: pointer;
+            padding: 0;
         }
 
-        textarea {
+        .close-btn:hover { color: var(--foreground); }
+
+        label {
+            display: block;
+            font-family: var(--font-mono);
+            font-size: 10px;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            color: var(--muted-foreground);
+            margin-top: 14px;
+        }
+
+        #statementBox {
             width: 100%;
-            height: 90px;
-            background: #0d1117;
-            color: var(--accent-blue);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 10px;
-            box-sizing: border-box;
-            font-family: monospace;
-            margin-top: 10px;
-            resize: none;
+            height: 110px;
+            margin-top: 8px;
+            color: var(--cyan);
         }
 
         .verification-section {
-            margin-top: 20px;
-            padding-top: 15px;
-            border-top: 1px dashed var(--border-color);
+            margin-top: 22px;
+            padding-top: 18px;
+            border-top: 1px dashed var(--border);
         }
 
         .input-group {
@@ -122,107 +131,122 @@
             margin-top: 10px;
         }
 
-        .input-group input {
-            flex: 1;
-            background: #0d1117;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 10px;
-            color: var(--text-primary);
-        }
+        .input-group .dwr-input { flex: 1; }
 
-        .submit-btn {
-            width: auto;
-            background-color: var(--accent-blue);
-            color: #0d1117;
-            margin-top: 0;
-        }
-
-        /* Flag Box Styles */
+        /* Presentation of the revealed flag panel. */
         .flag-box {
-            display: none;
-            margin-top: 15px;
-            padding: 12px;
-            background: rgba(46, 160, 67, 0.15);
-            border: 1px solid var(--accent-green);
-            border-radius: 6px;
+            margin-top: 16px;
+            padding: 14px;
+            background: color-mix(in oklab, var(--success) 12%, transparent);
+            border: 1px solid color-mix(in oklab, var(--success) 50%, var(--border));
+            border-radius: var(--radius);
             text-align: center;
         }
 
+        .flag-box > span {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--success);
+        }
+
         .flag-box code {
-            font-family: monospace;
-            font-size: 1.1em;
-            color: var(--accent-green);
+            font-family: var(--font-mono);
+            font-size: 1.05em;
+            color: var(--success);
             display: block;
-            margin: 8px 0;
+            margin: 10px 0;
             word-break: break-all;
+            user-select: all;
         }
 
-        .copy-btn {
-            background-color: var(--accent-green);
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            width: auto;
-            margin-top: 5px;
-            font-size: 0.85em;
+        .status-error {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--destructive);
+            margin-top: 10px;
+            min-height: 1em;
         }
-
-        .status-error { color: var(--accent-red); margin-top: 10px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <header>
-        <h1>INVESTIGATION FILE #204</h1>
-        <p>Analyse patient statements for environmental or logical flaws. Identify the bulletproof account.</p>
-    </header>
+    <div class="dwr-shell">
 
-    <div class="container">
-        <div class="suspect-card">
-            <h2>Patient A (Leo)</h2>
-            <button onclick="openModal('leo')">Examine Profile</button>
+        <div class="dwr-header">
+            <div class="dwr-eyebrow">// investigation file #204</div>
+            <h1>Patient <span class="dwr-accent">Statements</span></h1>
         </div>
 
-        <div class="suspect-card">
-            <h2>Patient B (Maya)</h2>
-            <button onclick="openModal('maya')">Examine Profile</button>
+        <div class="dwr-panel dwr-panel--elevated briefing">
+            <div class="dwr-eyebrow">// briefing</div>
+            <h2 class="dwr-magenta">Cross-Examination</h2>
+            <p>
+                A liar always trips over their own timeline. Two of these patients are
+                lying, but one has a flawless, logically sound story. Use your critical
+                thinking to spot the physical and environmental contradictions. Find the
+                only patient telling the truth, click on their file, and type the
+                5-letter word for what their story has proven.
+            </p>
         </div>
 
-        <div class="suspect-card">
-            <h2>Patient C (Chloe)</h2>
-            <button onclick="openModal('chloe')">Examine Profile</button>
+        <div class="container">
+            <div class="dwr-panel suspect-card">
+                <h2>Leo</h2>
+                <div class="role">// patient a</div>
+                <button class="dwr-btn" onclick="openModal('leo')">Examine Profile</button>
+            </div>
+
+            <div class="dwr-panel suspect-card">
+                <h2>Maya</h2>
+                <div class="role">// patient b</div>
+                <button class="dwr-btn" onclick="openModal('maya')">Examine Profile</button>
+            </div>
+
+            <div class="dwr-panel suspect-card">
+                <h2>Chloe</h2>
+                <div class="role">// patient c</div>
+                <button class="dwr-btn" onclick="openModal('chloe')">Examine Profile</button>
+            </div>
         </div>
+
     </div>
 
     <div id="statementModal" class="modal">
         <div class="modal-content">
-            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+
+            <div class="dwr-eyebrow">// interview transcript</div>
             <h3 id="modalName" style="margin-top:0;">Patient Log</h3>
-            <label for="statementBox">Interview Transcript:</label>
-            <textarea id="statementBox" readonly></textarea>
+
+            <label for="statementBox">Transcript</label>
+            <textarea id="statementBox" class="dwr-textarea" readonly></textarea>
 
             <div class="verification-section">
-                <label for="flagInput"><strong>Verify Patient Status:</strong></label>
+                <label for="flagInput">Verify patient status</label>
                 <div class="input-group">
-                    <input type="text" id="flagInput" placeholder="Enter keyword..." autocomplete="off">
-                    <button class="submit-btn" onclick="verifyFlag()">Verify</button>
+                    <input type="text" id="flagInput" class="dwr-input" placeholder="Enter keyword..." autocomplete="off">
+                    <button class="dwr-btn dwr-btn--solid" onclick="verifyFlag()">Verify</button>
                 </div>
-                
+
                 <div id="errorMessage" class="status-error"></div>
 
                 <div id="flagBox" class="flag-box">
-                    <span>✓ Verification Successful! Here is your flag:</span>
+                    <span>✓ Verification successful — flag released</span>
                     <code id="flagText"></code>
-                    <button class="copy-btn" onclick="copyFlag()">Copy Flag to Clipboard</button>
+                    <button class="dwr-btn dwr-btn--ghost" onclick="copyFlag()">Copy Flag</button>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
+        /* ================================================================
+           PUZZLE-CRITICAL — logic below is unchanged from the original.
+           SECRET_WORD, CTF_FLAG, the three transcripts and the
+           chloe-plus-keyword check ARE the challenge. Do not edit them.
+           ================================================================ */
         let currentSuspect = '';
 
         // Target secret word and flag definition
