@@ -2,30 +2,47 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Overlapping Draggable Glass Images</title>
-  <style>
-    body {
-      background: #0f172a;
-      min-height: 100vh;
-      margin: 0;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-family: system-ui, -apple-system, sans-serif;
-    }
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Glass Plates</title>
 
-    /* 1000px x 1000px Boundary Box */
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" media="print" onload="this.media='all'"
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Space+Grotesk:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="../dwr-theme.css">
+
+  <style>
+    /* ================================================================
+       PUZZLE-CRITICAL — DO NOT CHANGE
+       ----------------------------------------------------------------
+       The challenge is stacking the plates so `mix-blend-mode: screen`
+       composites them into a legible image. Every number below is load
+       bearing:
+
+         * opacity: 0.4 and mix-blend-mode: screen -- the reveal itself.
+         * width: 400px -- the plates must be the size they were authored
+           at, or the layers never line up.
+         * the 1000x1000 canvas and its 1px border -- the drag script
+           clamps against canvas.clientWidth/clientHeight, so changing
+           either the size or the border width changes where plates can
+           be dropped.
+         * the five starting positions -- the scattered layout is the
+           puzzle's opening state.
+
+       The canvas background must also stay DARK. `screen` lightens: on a
+       pale backdrop every plate washes out to white and the image is
+       unreadable. It is var(--surface-elevated) here, a near-equivalent
+       of the original #1e293b, and must not be lightened further.
+       ================================================================ */
     .canvas-container {
       width: 1000px;
       height: 1000px;
       position: relative;
-      border: 1px dashed rgba(255, 255, 255, 0.2); /* Faint boundary line */
-      background: #1e293b;
+      border: 1px dashed color-mix(in oklab, var(--foreground) 18%, transparent);
+      background: var(--surface-elevated);
       border-radius: 16px;
       overflow: hidden;
     }
 
-    /* Base Glass Image Style */
     .glass-img {
       width: 400px;
       height: auto;
@@ -39,67 +56,78 @@
       -webkit-backdrop-filter: blur(10px);
       border: 1px solid rgba(255, 255, 255, 0.3);
       border-radius: 12px;
-      
+
       transition: transform 0.15s ease, opacity 0.15s ease;
     }
 
     /* Initial Positions Inside the 1000px Box */
-    #glass1 {
-      top: 100px;
-      left: 100px;
-      mix-blend-mode: screen;
-    }
-
-    #glass2 {
-      top: 100px;
-      right: 100px;
-      mix-blend-mode: screen;
-    }
-
-    #glass3 {
-      top: 350px;
-      left: 300px;
-      mix-blend-mode: screen;
-    }
-
-    #glass4 {
-      bottom: 100px;
-      left: 100px;
-      mix-blend-mode: screen;
-    }
-
-    #glass5 {
-      bottom: 100px;
-      right: 100px;
-      mix-blend-mode: screen;
-    }
+    #glass1 { top: 100px;    left: 100px;  mix-blend-mode: screen; }
+    #glass2 { top: 100px;    right: 100px; mix-blend-mode: screen; }
+    #glass3 { top: 350px;    left: 300px;  mix-blend-mode: screen; }
+    #glass4 { bottom: 100px; left: 100px;  mix-blend-mode: screen; }
+    #glass5 { bottom: 100px; right: 100px; mix-blend-mode: screen; }
 
     /* Hover & Active Grab States */
-    .glass-img:hover {
-      opacity: 0.6;
-      transform: scale(1.02);
+    .glass-img:hover  { opacity: 0.6; transform: scale(1.02); }
+    .glass-img:active { cursor: grabbing; opacity: 0.8; transform: scale(1.01); }
+    /* =============== END PUZZLE-CRITICAL =========================== */
+
+    /* Chrome only, all of it outside the canvas so nothing composites
+       with the blended plates. */
+    .board-wrap {
+      display: flex;
+      justify-content: center;
     }
 
-    .glass-img:active {
-      cursor: grabbing;
-      opacity: 0.8;
-      transform: scale(1.01);
+    .briefing { margin-bottom: 24px; }
+    .briefing h2 { font-size: 1.25rem; margin-bottom: 10px; }
+    .briefing p {
+      color: var(--muted-foreground);
+      font-size: 15px;
+      margin: 0;
+      max-width: 78ch;
     }
+
   </style>
 </head>
 <body>
 
-  <div class="canvas-container" id="canvas">
-    
-    <img src="distraction_2.png" alt="Glass Layer 1" class="glass-img" id="glass1" draggable="false" />
-    <img src="distraction_3.png" alt="Glass Layer 2" class="glass-img" id="glass2" draggable="false" />
-    <img src="distraction_1.png" alt="Glass Layer 3" class="glass-img" id="glass3" draggable="false" />
-    <img src="layer_2.png" alt="Glass Layer 4" class="glass-img" id="glass4" draggable="false" />
-    <img src="layer_1.png" alt="Glass Layer 5" class="glass-img" id="glass5" draggable="false" />
+  <div class="dwr-shell" style="max-width:1000px;">
+
+    <div class="dwr-header">
+      <div class="dwr-eyebrow">// evidence lab</div>
+      <h1>Glass <span class="dwr-accent">Plates</span></h1>
+    </div>
+
+    <div class="dwr-panel dwr-panel--elevated briefing">
+      <div class="dwr-eyebrow">// briefing</div>
+      <h2 class="dwr-magenta">Alignment Required</h2>
+      <p>
+        The terminal requires alignment. Superimpose the ghost fragment onto the
+        homepage matrix to synthesize the true digits.
+      </p>
+    </div>
 
   </div>
 
+  <div class="board-wrap">
+    <div class="canvas-container" id="canvas">
+
+      <img src="distraction_2.png" alt="Glass Layer 1" class="glass-img" id="glass1" draggable="false" />
+      <img src="distraction_3.png" alt="Glass Layer 2" class="glass-img" id="glass2" draggable="false" />
+      <img src="distraction_1.png" alt="Glass Layer 3" class="glass-img" id="glass3" draggable="false" />
+      <img src="layer_2.png" alt="Glass Layer 4" class="glass-img" id="glass4" draggable="false" />
+      <img src="layer_1.png" alt="Glass Layer 5" class="glass-img" id="glass5" draggable="false" />
+
+    </div>
+  </div>
+
   <script>
+    /* ================================================================
+       PUZZLE-CRITICAL — drag logic unchanged from the original.
+       It clamps against canvas.clientWidth / clientHeight, so it is
+       coupled to the 1000x1000 box above.
+       ================================================================ */
     const canvas = document.getElementById('canvas');
     const glass1 = document.getElementById('glass1');
     const glass2 = document.getElementById('glass2');
@@ -116,7 +144,7 @@
       img.addEventListener('mousedown', (e) => {
         activeImage = img;
         const rect = img.getBoundingClientRect();
-        
+
         // Calculate offset relative to image top-left
         offsetX = e.clientX - rect.left;
         offsetY = e.clientY - rect.top;

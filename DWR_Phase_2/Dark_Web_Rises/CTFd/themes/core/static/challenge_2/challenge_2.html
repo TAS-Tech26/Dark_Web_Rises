@@ -3,136 +3,167 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Image Analysis Challenge</title>
+  <title>Image Analysis — Case Profile</title>
+
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" media="print" onload="this.media='all'"
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Space+Grotesk:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="../dwr-theme.css">
+
   <style>
-    body {
-      background-color: #212529; 
-      color: #f8f9fa;
-      font-family: sans-serif;
-      margin: 0;
-      padding: 40px 20px;
+    /* ================================================================
+       PUZZLE-CRITICAL — DO NOT CHANGE
+       ----------------------------------------------------------------
+       * .challenge-image keeps cursor:crosshair. It is the only visual
+         cue that the image is interactive, and right-clicking it is the
+         entire challenge.
+       * .info-box and .context-menu MUST start display:none. The script
+         flips them to block; anything that makes them visible up front
+         hands the player the metadata (and the year) for free.
+       ================================================================ */
+    .challenge-image {
+      cursor: crosshair;
     }
 
-    /* Layout Wrapper */
+    .info-box {
+      display: none;
+    }
+
+    .context-menu {
+      display: none;
+      position: absolute;
+      z-index: 1000;
+    }
+    /* =============== END PUZZLE-CRITICAL =========================== */
+
     .layout-wrapper {
       display: flex;
       justify-content: center;
       align-items: flex-start;
-      gap: 40px;
-      max-width: 1000px; 
-      margin: 0 auto;
+      gap: 28px;
     }
 
-    /* Left Column (Image & Info Box) */
-    .left-column { 
-      flex: 1; 
-      max-width: 500px; 
-      text-align: center; 
-    }
-    
-    .left-column h3 {
-      margin-top: 0;
-      color: #f8f9fa;
+    .left-column { flex: 1; max-width: 540px; }
+    .right-column { flex: 1; max-width: 400px; }
+
+    .filename {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      color: var(--cyan);
+      margin: 0 0 12px;
+      word-break: break-all;
     }
 
-    .challenge-image { 
-      width: 100%; 
-      height: auto; 
-      border-radius: 8px; 
-      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
-      cursor: crosshair; /* Gives the user a hint to interact with it */
+    .challenge-image {
+      width: 100%;
+      height: auto;
+      display: block;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background-color: var(--background);
     }
 
-    /* The Info Box (Appears below the image) */
+    /* Presentation of the revealed panel. Its display:none above is what
+       matters; everything here is how it looks once the script shows it. */
     .info-box {
-      display: none; /* Hidden until an option is clicked */
-      margin-top: 20px;
-      padding: 15px;
-      background-color: #1c1e22;
-      border: 1px solid #444;
-      border-radius: 6px;
+      margin-top: 16px;
+      padding: 16px;
+      background-color: var(--background);
+      border: 1px solid color-mix(in oklab, var(--neon) 35%, var(--border));
+      border-radius: var(--radius);
       text-align: left;
-      font-family: monospace; /* Gives it a terminal/data look */
-      color: #00ff00;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.7;
+      color: var(--neon);
+      box-shadow: inset 0 0 40px color-mix(in oklab, var(--neon) 6%, transparent);
     }
 
-    /* Right Column (Text Description) */
-    .right-column {
-      flex: 1;
-      max-width: 400px;
-      background-color: #2c3034;
-      padding: 25px;
-      border-radius: 8px;
-      border: 1px solid #444;
-      line-height: 1.6;
-    }
-    
-    .right-column h2 {
-      margin-top: 0;
-      color: #00a8ff;
+    .info-box strong { color: var(--foreground); }
+
+    .right-column p {
+      color: var(--muted-foreground);
+      font-size: 15px;
     }
 
-    /* Custom Right-Click Context Menu */
+    .right-column p:last-child { margin-bottom: 0; }
+
+    /* Context menu chrome. */
     .context-menu {
-      position: absolute;
-      display: none; /* Hidden by default */
-      background-color: #2b2b2b;
-      border: 1px solid #555;
-      box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
-      border-radius: 4px;
-      padding: 5px 0;
-      min-width: 180px;
-      z-index: 1000;
+      background-color: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+      padding: 4px;
+      min-width: 200px;
       list-style-type: none;
       margin: 0;
     }
 
     .context-menu li {
-      padding: 10px 15px;
+      padding: 9px 12px;
       cursor: pointer;
-      font-size: 14px;
-      color: #eee;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--foreground);
+      border-radius: calc(var(--radius) - 3px);
     }
 
     .context-menu li:hover {
-      background-color: #007bff;
-      color: white;
+      background-color: color-mix(in oklab, var(--neon) 16%, transparent);
+      color: var(--neon);
     }
   </style>
 </head>
 <body>
 
-  <div class="layout-wrapper">
-    
-    <!-- LEFT COLUMN: Title, Image, and Info Box -->
-    <div class="left-column">
-      <h3> patient_case_profile.png</h3>
-      <!-- Replace 'your_image.jpg' with your actual image path -->
-      <img src="ferrir.png" alt="Target Schematic" class="challenge-image" id="target-img">
-      
-      <!-- The dynamic info box below the image -->
-      <div class="info-box" id="info-box">
-        <!-- Content gets injected here via JavaScript -->
-      </div>
+  <div class="dwr-shell">
+
+    <div class="dwr-header">
+      <div class="dwr-eyebrow">// evidence locker</div>
+      <h1>Case <span class="dwr-accent">Profile</span></h1>
+      <p>Evidence item recovered from the clinician's archive.</p>
     </div>
 
-    <!-- RIGHT COLUMN: Lore and Description -->
-    <div class="right-column">
-      <h2>Briefing</h2>
-      <p>
-        A perfect story is a curated delusion; it only shows you what it wants you to see. 
-        True insight requires looking beneath the canvas to examine the file's digital skeleton. 
-        Force the system to read this case profile's internal details and properties.  
-      </p>
-      <p>
-        Hidden deep within the clinician's background log tags, you will harvest the 4-digit secret year code that initiated the lie. 
-        Input that year to open the case file.
-      </p>
+    <div class="layout-wrapper">
+
+      <!-- LEFT COLUMN: file, image, and the revealed info panel -->
+      <div class="left-column">
+        <div class="dwr-panel">
+          <p class="filename">patient_case_profile.png</p>
+
+          <img src="ferrir.png" alt="Target Schematic" class="challenge-image" id="target-img">
+
+          <!-- Content gets injected here via JavaScript -->
+          <div class="info-box" id="info-box"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: lore and description -->
+      <div class="right-column">
+        <div class="dwr-panel dwr-panel--elevated">
+          <div class="dwr-eyebrow">// briefing</div>
+          <h2 class="dwr-magenta" style="font-size:1.25rem;">Look Beneath</h2>
+          <p>
+            A perfect story is a curated delusion; it only shows you what it wants you
+            to see. True insight requires looking beneath the canvas to examine the
+            file's digital skeleton. Force the system to read this case profile's
+            internal details and properties.
+          </p>
+          <p>
+            Hidden deep within the clinician's background log tags, you will harvest the
+            4-digit secret year code that initiated the lie. Input that year to open the
+            case file.
+          </p>
+        </div>
+      </div>
+
     </div>
 
   </div>
 
-  <!-- THE CUSTOM CONTEXT MENU (Hidden until right-click) -->
+  <!-- THE CUSTOM CONTEXT MENU (hidden until right-click) -->
   <ul class="context-menu" id="custom-menu">
     <li onclick="showInfo('view')">View Full Resolution</li>
     <li onclick="showInfo('save')">Save Image As...</li>
@@ -140,15 +171,20 @@
   </ul>
 
   <script>
+    /* ================================================================
+       PUZZLE-CRITICAL — logic below is unchanged from the original.
+       The injected strings, especially the 1984 dates in 'properties',
+       are the answer. Do not edit them.
+       ================================================================ */
     const targetImg = document.getElementById('target-img');
     const customMenu = document.getElementById('custom-menu');
     const infoBox = document.getElementById('info-box');
 
 
     targetImg.addEventListener('contextmenu', function(e) {
-      e.preventDefault(); 
-      
-    
+      e.preventDefault();
+
+
       customMenu.style.top = `${e.pageY}px`;
       customMenu.style.left = `${e.pageX}px`;
       customMenu.style.display = 'block';

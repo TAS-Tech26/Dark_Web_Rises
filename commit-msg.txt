@@ -1,0 +1,30 @@
+Full Dark Web Rises stack: phase 1 game + phase 2 CTFd
+
+Clone-and-run tree: Phase 1's compose builds CTFd from
+../DWR_Phase_2/Dark_Web_Rises, so the runnable unit is this parent
+folder rather than either repo alone.
+
+Includes a hardening pass over Phase 1 for a 700-player live event.
+Verified locally: 61 automated checks, a clean five-round game, plus
+abort, late-join and post-game reconnect.
+
+- Round and per-generation deadlines, so one team behind a degraded
+  provider can no longer hold every player indefinitely.
+- Teams connecting after the start snapshot join at the next round
+  boundary instead of being excluded from the whole event, and are told
+  so rather than shown final standings.
+- POST /admin/abort ends a stuck game with real scores; _finish_game is
+  idempotent because it issues the Phase 2 passwords.
+- Phase 2 credentials retained server-side, so a team reconnecting after
+  game over still receives them.
+- Admin accounts are never locked out by failed logins, and admin ids no
+  longer share the roster id space.
+- CTFD_SECRET_KEY must be set explicitly; placeholder admin passwords
+  warn loudly; .env.* and state-archive/ excluded from the image.
+- DEEPINFRA_MODEL defaults to FLUX-1-schnell, and the per-provider
+  timeout budget is actually enforced.
+- Frontend: errors surface on the round screen, reconnect uses backoff
+  with jitter, sessions survive an OS tab discard, and the copy matches
+  one device per player.
+- Ops: log rotation, per-service resource limits, proxy headers, and
+  FINAL_LEADERBOARD_URL derived from PUBLIC_HOST.

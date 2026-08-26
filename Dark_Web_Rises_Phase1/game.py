@@ -65,25 +65,6 @@ ROUND_PENALTY = float(os.getenv("ROUND_PENALTY", "5"))
 ROUND_BREAK_SECONDS = float(os.getenv("ROUND_BREAK_SECONDS", "10"))
 COUNTDOWN_SECONDS = float(os.getenv("COUNTDOWN_SECONDS", "5"))
 
-# Headroom on top of (TIME_PER_ROUND x MAX_MEMBERS_PER_TEAM) before a round is
-# treated as hung and cancelled. It has to absorb everything run_round can
-# legitimately spend BEYOND the raw turn budgets:
-#
-#   * up to 10s per turn waiting for a player who is offline at turn start
-#   * up to team.IMAGE_GRACE_SECONDS (15s) per turn for an in-flight generation
-#     that began while there was still time on the clock
-#
-# which is ~25s x 4 members = ~100s worst case. At the defaults (90s turns, 4
-# members) that puts a fully-degraded-but-legitimate round at ~460s against a
-# 360s raw turn budget, so 120s of slack would leave only 20s of margin -- 4%,
-# on a number whose failure mode is every team in the round scoring 0.
-#
-# 180s gives ~80s of real margin and still catches a genuine hang inside 9
-# minutes. The asymmetry is the point: waiting an extra minute costs nothing,
-# cancelling a slow-but-working round costs the event. Raise it, don't lower
-# it, unless you have measured a real round.
-ROUND_SLACK_SECONDS = float(os.getenv("ROUND_SLACK_SECONDS", "180"))
-
 # --- Phase 2 handoff --------------------------------------------------
 # The top 50% of the final standings advance to the CTFd-hosted round 2. At
 # game over final_score.py writes two files next to the checkpoint: a CSV in
@@ -116,24 +97,6 @@ async def lifespan(_app: FastAPI):
             logger.error(
                 "Could not pre-load the CLIP model (%s). Scoring will retry on first use.", exc
             )
-
-    # anyio's default thread limiter is 40 tokens, and TWO unrelated workloads
-    # draw on it at the same instant:
-    #
-    #   * httpx resolves DNS via anyio.to_thread.run_sync, at up to
-    #     MAX_CONCURRENT_IMAGE_REQUESTS (40) concurrent generations;
-    #   * Starlette's StaticFiles does its stat/read on the same pool, and with
-    #     IMAGE_DELIVERY=url all 175 players fetch their image over that mount.
-    #
-    # So the burst of image fetches at a turn boundary directly delays DNS for
-    # the next wave of generations, invisibly. The load-test harness already
-    # raises this; the server never did.
-    try:
-        import anyio.to_thread
-        anyio.to_thread.current_default_thread_limiter().total_tokens = 200
-        logger.info("anyio thread limiter raised to 200.")
-    except Exception:
-        logger.warning("Could not raise the anyio thread limiter.", exc_info=True)
 
     warm_task = asyncio.create_task(_warm())
     try:
@@ -332,13 +295,6 @@ logger.info(
     TIME_PER_ROUND, MAX_MEMBERS_PER_TEAM, TIME_PER_ROUND, _max_round_seconds,
     TOTAL_ROUNDS, _max_game_seconds / 60,
 )
-logger.info(
-    "Round hang ceiling: a round is cancelled after %.0fs (%.0fs of turns + %.0fs "
-    "slack). Cancelled teams score 0 for that round, so this must sit comfortably "
-    "above a legitimately slow round -- raise ROUND_SLACK_SECONDS if it does not.",
-    TIME_PER_ROUND * MAX_MEMBERS_PER_TEAM + ROUND_SLACK_SECONDS,
-    TIME_PER_ROUND * MAX_MEMBERS_PER_TEAM, ROUND_SLACK_SECONDS,
-)
 
 # StaticFiles(directory="static") resolved against the *current working
 # directory*, which is not the project root under Azure App Service's
@@ -519,23 +475,17 @@ async def _play_all_rounds(game: GameServer, time_per_round, timeout, penalty):
     active_teams = []
     inactive_team_ids = set(checkpoint_inactive)
 
-    def _admit(team, joining_at_round):
-        """Bring a team into play, back-filling the rounds it has missed."""
-        team.team_state = TeamState.PLAYING
-        team.rotation_order = list(team.members)
-        team.score = []
-        for r in range(start_round_num):
-            team.score.append(rounds_history.get(str(r), {}).get(str(team.id), 0))
-        # Rounds already played in THIS session, before they joined.
-        while len(team.score) < joining_at_round:
-            team.score.append(0.0)
-        active_teams.append(team)
-        game.participating_team_ids.add(team.id)
-        inactive_team_ids.discard(team.id)
-
     for team in game.teams:
         if len(team.connected_sockets) > 0:
-            _admit(team, joining_at_round=start_round_num)
+            team.team_state = TeamState.PLAYING
+            team.rotation_order = list(team.members)
+            active_teams.append(team)
+            game.participating_team_ids.add(team.id)
+
+            team.score = []
+            for r in range(start_round_num):
+                score = rounds_history.get(str(r), {}).get(str(team.id), 0)
+                team.score.append(score)
         else:
             team.team_state = TeamState.DONE
             team.score = []
@@ -556,36 +506,6 @@ async def _play_all_rounds(game: GameServer, time_per_round, timeout, penalty):
     for round_num in range(start_round_num, total_rounds):
         game.current_round = round_num + 1
 
-        # Late admission.
-        #
-        # Membership used to be decided ONCE, about five seconds after the
-        # moderator pressed Start. A team still mid-login at that instant --
-        # entirely normal when 700 people are typing credentials off printed
-        # cards -- was marked DONE and excluded from the leaderboard for the
-        # whole event, with no way to add them back. The failure looked like a
-        # frontend bug: those players eventually logged in and were shown a
-        # results screen with a score of 0 while everyone else played.
-        #
-        # Re-checking each round means a team that arrives during round 1 plays
-        # from round 2 with zeros behind it, rather than losing the event to a
-        # five-second window.
-        for team in game.teams:
-            if team.id in game.participating_team_ids or not team.connected_sockets:
-                continue
-            _admit(team, joining_at_round=round_num)
-            logger.info(
-                "Team %s connected late; joining from round %s with %s zero-scored "
-                "round(s) behind them.", team.id, round_num + 1, round_num,
-            )
-            # Their clients are sitting on a results or waiting screen, so tell
-            # them the game is running before their first turn arrives.
-            await team.announce_to_team({
-                JSONFields.TYPE: Responses.GAME_STATE_RESPONSE,
-                JSONFields.GAME_STATE: GameState.GAME_RUNNING,
-                JSONFields.ROUND: round_num + 1,
-                JSONFields.TOTAL_ROUNDS: total_rounds,
-            })
-
         # return_exceptions=True so one team's failure cannot cancel every
         # other team's round. Team.run_round already guards itself, so this
         # is belt-and-braces -- but the cost of being wrong here is the whole
@@ -594,25 +514,7 @@ async def _play_all_rounds(game: GameServer, time_per_round, timeout, penalty):
             asyncio.create_task(team.run_round(round_num, time_per_round, timeout, penalty))
             for team in active_teams
         ]
-
-        # Hard ceiling on the round.
-        #
-        # Without it the round ends only when the SLOWEST team's run_round
-        # returns, and nothing bounded that: one team stuck behind a degraded
-        # provider held all 700 players on a screen whose timer already read 0,
-        # with no moderator override. A round is at most one turn per member
-        # plus the grace windows inside run_round, so anything past that plus
-        # slack is a hang, not slow play.
-        #
-        # Cancellation is a designed path now -- Team.run_round records the
-        # zero on CancelledError so team.score stays aligned with the round
-        # index -- and the isinstance(BaseException) handler below already
-        # scores a timed-out team 0.
-        round_deadline = time_per_round * game.max_members_per_team + ROUND_SLACK_SECONDS
-        results = await asyncio.gather(
-            *(asyncio.wait_for(t, timeout=round_deadline) for t in round_tasks),
-            return_exceptions=True,
-        )
+        results = await asyncio.gather(*round_tasks, return_exceptions=True)
 
         round_scores = []
         for team, result in zip(active_teams, results):
@@ -625,13 +527,7 @@ async def _play_all_rounds(game: GameServer, time_per_round, timeout, penalty):
         round_data = {str(team.id): score for team, score in zip(active_teams, round_scores)}
         logger.info("Round %s complete for all teams: %s", round_num + 1, round_data)
 
-        # Off the event loop: this re-serialises the whole history and fsyncs,
-        # and on a bind-mounted state volume an fsync can stall for hundreds of
-        # milliseconds. It runs at the exact moment 175 teams have just finished
-        # scoring, on the single loop that serves all 700 players.
-        await asyncio.to_thread(
-            save_game_checkpoint, round_num, round_data, inactive_team_ids
-        )
+        save_game_checkpoint(round_num, round_data, inactive_team_ids)
 
         announcements = [
             team.announce_to_team({
@@ -642,6 +538,10 @@ async def _play_all_rounds(game: GameServer, time_per_round, timeout, penalty):
                 JSONFields.ROUND_SCORE: round_data[str(team.id)],
                 JSONFields.TEAM_SCORE: game.team_total(team),
                 JSONFields.ROUND_SCORES: list(team.score),
+                # The image the chain actually ended on. Read here, after
+                # run_round has returned for every team, because the next
+                # round's run_round overwrites current_image at its start.
+                JSONFields.ROUND_IMAGE: team.current_image,
                 JSONFields.TIME: ROUND_BREAK_SECONDS,
             })
             for team in active_teams
@@ -653,20 +553,7 @@ async def _play_all_rounds(game: GameServer, time_per_round, timeout, penalty):
 
 
 async def _finish_game(game: GameServer):
-    """Mark every team done, compute the leaderboard, and tell everyone.
-
-    Idempotent. This MUST run exactly once: it generates the Phase 2 CTFd
-    passwords and writes roster_cache_phase2.csv, so a second pass would issue
-    fresh passwords that no longer match the accounts already imported into
-    CTFd. Two callers now exist (start_games' `finally` and /admin/abort), and
-    on an abort both can fire, so the guard is load-bearing rather than
-    defensive. Safe without a lock: nothing between here and the GAME_OVER
-    assignment below awaits, so no other task can interleave.
-    """
-    if game.game_state == GameState.GAME_OVER:
-        logger.info("_finish_game called again after game over; ignoring.")
-        return
-
+    """Mark every team done, compute the leaderboard, and tell everyone."""
     for team in game.teams:
         team.team_state = TeamState.DONE
         game.scores[team.id] = game.team_total(team)
@@ -693,13 +580,6 @@ async def _finish_game(game: GameServer):
             scores={entry["team_id"]: entry["score"] for entry in leaderboard},
         )
         qualified_ids = set(qualified)
-        # Retained on the server so check_login can serve these to a team that
-        # reconnects after game over -- see GameServer.phase2_* . Without this
-        # the credentials exist only in the single GAME_OVER broadcast below,
-        # and a team that missed it has no way to recover them.
-        game.phase2_qualified_ids = qualified_ids
-        game.phase2_passwords = dict(phase2_passwords)
-        game.phase2_url = PHASE2_CTFD_URL
         logger.info(
             "Phase 2: %s of %s teams qualified (cutoff %s). CTFd import written to "
             "%s, phase 1 scores to %s.",
@@ -758,26 +638,6 @@ async def _cleanup_connection(game: GameServer, user_id, team_id, client_type, a
         return
 
     if client_type == "admin":
-        # Same identity check as the player path below, for the same reason.
-        #
-        # Without it, opening the dashboard in a second tab and closing it
-        # empties connected_admins -- and resolve_admin_token gates on set
-        # membership, so the FIRST tab's still-valid token starts 403ing. The
-        # dashboard poll swallows that and keeps rendering stale numbers, Run
-        # Game refuses, and logout does not help because check_logout also
-        # requires membership. Only a hard reload recovers, which is not
-        # something a moderator will work out with 700 people waiting.
-        registered = game.connected_sockets.get(user_id)
-        if socket is not None and registered is not None and registered is not socket:
-            logger.info(
-                "Skipping admin cleanup for %s: superseded by a newer admin session.",
-                user_id,
-            )
-            # Still retire this session's own token; it is not the live one.
-            if admin_token is not None:
-                game.admin_tokens.pop(admin_token, None)
-            return
-
         game.connected_admins.discard(user_id)
         game.connected_sockets.pop(user_id, None)
         if admin_token is not None:
@@ -1048,25 +908,6 @@ async def _run_countdown_then_start(game: GameServer, time_per_round, timeout, p
     await start_games(game, time_per_round=time_per_round, timeout=timeout, penalty=penalty)
 
 
-# Strong references to background tasks.
-#
-# asyncio holds only a WEAK reference to a running task, and add_done_callback
-# does not change that -- the task holds the callback, not the reverse. A bare
-# create_task() whose handle goes out of scope can therefore be garbage
-# collected mid-execution. For the task that drives the entire event that is a
-# low-probability, total-blast-radius failure, so it is held explicitly.
-_background_tasks: set = set()
-
-# The in-flight game driver, so /admin/abort has something to cancel.
-_game_driver_task: asyncio.Task | None = None
-
-
-def _track(task: asyncio.Task) -> asyncio.Task:
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
-    return task
-
-
 def _log_task_exception(task: asyncio.Task):
     """create_task() results are never awaited here, so without this an
     exception is only surfaced when the task is garbage collected."""
@@ -1104,67 +945,17 @@ async def force_start_game(
     # five seconds before responding -- long enough for an admin dashboard
     # with a short client timeout to report a failure for a game that did in
     # fact start.
-    global _game_driver_task
-    task = _track(asyncio.create_task(
+    task = asyncio.create_task(
         _run_countdown_then_start(
             game,
             time_per_round=TIME_PER_ROUND,
             timeout=TURN_TIMEOUT,
             penalty=ROUND_PENALTY,
         )
-    ))
+    )
     task.add_done_callback(_log_task_exception)
-    _game_driver_task = task
 
     return {"status": "success", "message": "Game countdown initiated successfully."}
-
-
-@app.post("/admin/abort")
-async def abort_game(
-    admin_id: int = Depends(verify_admin_session),
-    game: GameServer = Depends(get_game_server),
-):
-    """End the event now, keeping the scores collected so far.
-
-    The escape hatch for the state this had no exit from. game_state is set to
-    COUNTDOWN *before* the driver task is created, so if that task dies, or a
-    round hangs, the game is pinned in COUNTDOWN/GAME_RUNNING and /admin/rungame
-    refuses to do anything ("already started"). The only recovery was a process
-    restart -- which then needs all 700 players to log in again before the
-    membership snapshot will include their teams.
-
-    This turns "the event is stuck and I have 700 people watching" into "the
-    event ended early with real scores on real screens".
-    """
-    global _game_driver_task
-
-    if game.game_state in (GameState.LOGIN_PERIOD, GameState.GAME_OVER):
-        raise HTTPException(
-            status_code=400,
-            detail=f"No game in progress to abort (state={game.game_state}).",
-        )
-
-    logger.warning("Admin %s ABORTED the game from state %s.", admin_id, game.game_state)
-
-    task = _game_driver_task
-    if task is not None and not task.done():
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.exception("Game driver raised while being aborted; continuing to finish.")
-    _game_driver_task = None
-
-    # _finish_game is idempotent, so it does not matter whether the driver's
-    # own `finally` managed to run it before cancellation took effect.
-    await _finish_game(game)
-
-    return {
-        "status": "success",
-        "message": "Game aborted; final scores broadcast to all connected teams.",
-    }
 
 
 @app.get("/admin/dashboard")

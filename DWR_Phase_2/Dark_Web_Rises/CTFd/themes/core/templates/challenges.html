@@ -1,11 +1,170 @@
 {% extends "base.html" %}
 
 {% block content %}
+  {#
+    ------------------------------------------------------------------
+    MISSION BRIEFING
+    ------------------------------------------------------------------
+    Shown automatically the first time each ACCOUNT opens this tab on a
+    given device, then remembered. The "Briefing" button in the header
+    below reopens it at any time.
+
+    Per account and per device: a different CTFd login on the same browser
+    gets its own first-time popup, and the same login on a new device sees
+    it again. There is no server-side per-user flag in CTFd to hang this
+    off without a plugin.
+
+    TO EDIT THE TEXT: change only what is between the BRIEFING CONTENT
+    markers further down. Everything else is machinery.
+
+    NOTE: this text is baked into the CTFd image, so a wording change
+    needs `docker compose build ctfd` before it appears. Do not plan on
+    editing it during the event.
+
+    Built with Alpine (already loaded by this theme) rather than
+    Bootstrap's modal JS: the theme bundles Bootstrap through Vite and
+    does not reliably expose `window.bootstrap`, so calling
+    `new bootstrap.Modal(...)` from a template is not safe here.
+  #}
+  <style>
+    /* Alpine sets this on load; without the rule the briefing flashes
+       on screen before Alpine initialises and hides it. */
+    [x-cloak] { display: none !important; }
+
+    .dwr-briefing-overlay {
+      position: fixed;
+      inset: 0;
+      /* Above CTFd's fixed navbar, which sits at Bootstrap's 1030. */
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      background: color-mix(in oklab, var(--background, #0d0e12) 82%, transparent);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      overflow-y: auto;
+    }
+    .dwr-briefing-panel {
+      width: 100%;
+      max-width: 720px;
+      /* Cap the height so a long briefing scrolls inside the panel
+         rather than pushing its own dismiss button off screen -- on a
+         phone that leaves no way to close it. */
+      max-height: calc(100vh - 2rem);
+      display: flex;
+      flex-direction: column;
+      background: var(--surface-elevated, #16181d);
+      border: 1px solid var(--border, #2a2d34);
+      border-radius: var(--radius, 6px);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+    }
+    .dwr-briefing-body {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      color: var(--muted-foreground, #9ca3af);
+      font-size: 15px;
+    }
+    .dwr-briefing-body p:last-child { margin-bottom: 0; }
+  </style>
+
+  <div
+      x-data="{
+        open: false,
+        // Keyed by CTFd account, not just by browser.
+        //
+        // localStorage is scoped to the browser profile and origin, so an
+        // unkeyed flag means the SECOND account to use a given browser
+        // never sees the briefing -- including every incognito window,
+        // which all share one session until the last one is closed. On a
+        // shared or handed-around device that silently skips the briefing
+        // for whoever logs in next.
+        //
+        // window.init is set by base.html on every page, so userId is
+        // always available here.
+        storageKey() {
+          var id = (window.init && window.init.userId) ? window.init.userId : 'anon';
+          return 'dwr-briefing-seen:' + id;
+        },
+        init() {
+          // Errs toward SHOWING it: private windows and blocked site
+          // data make localStorage throw, and a briefing nobody sees is
+          // a worse failure than one seen twice.
+          try {
+            this.open = localStorage.getItem(this.storageKey()) !== '1';
+          } catch (e) {
+            this.open = true;
+          }
+        },
+        dismiss() {
+          this.open = false;
+          try { localStorage.setItem(this.storageKey(), '1'); } catch (e) {}
+        }
+      }"
+      @dwr-open-briefing.window="open = true"
+      @keydown.escape.window="open && dismiss()"
+  >
+    {#
+      .self so only a click on the backdrop itself dismisses, not a click
+      that bubbles up from inside the panel. Alpine's .outside modifier
+      would also work but depends on its visibility heuristics, and the
+      Briefing button lives outside this element -- clicking it would race
+      the reopen against a dismiss.
+    #}
+    <div x-show="open" x-cloak class="dwr-briefing-overlay" role="dialog" aria-modal="true"
+         aria-labelledby="dwr-briefing-title" @click.self="dismiss()">
+      <div class="dwr-briefing-panel">
+        <div class="p-4 border-bottom border-secondary d-flex justify-content-between align-items-center">
+          <div>
+            <div class="dwr-eyebrow">// system briefing</div>
+            <h3 class="dwr-magenta mb-0" id="dwr-briefing-title">
+              {% trans %}Mission Briefing{% endtrans %}
+            </h3>
+          </div>
+          <button type="button" class="close-btn" @click="dismiss()" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="p-4 dwr-briefing-body">
+          <!-- ================= BRIEFING CONTENT ================= -->
+          <!-- ===================================================== -->
+          <!-- REPLACE EVERYTHING BETWEEN THESE MARKERS.             -->
+          <!-- Plain HTML. <p>, <ul>, <strong>, <img> all work.      -->
+          <!-- ===================================================== -->
+
+          <p>
+            A group of friends find themselves stranded in a brutal winter blizzard. Seeking shelter, they break into the remote, abandoned estate of Dr. Evelyn Vance, a renowned psychiatrist who vanished without a trace five years ago. While trying to restart the house's backup power generator in her private study, they boot up a vintage, encrypted terminal connected to her private network. To get the heating and power online, they must expose a truth she tried to erase.
+          </p>
+
+          <!-- =============== END BRIEFING CONTENT ================ -->
+        </div>
+
+        <div class="p-3 border-top border-secondary d-flex justify-content-between align-items-center background-elevated">
+          <span class="dwr-eyebrow mb-0">
+            {% trans %}Reopen any time from the Briefing button.{% endtrans %}
+          </span>
+          <button type="button" class="dwr-btn dwr-btn--solid" @click="dismiss()">
+            {% trans %}Begin{% endtrans %}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="jumbotron">
-    <div class="container">
-      <h1>
+    <div class="container d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <h1 class="mb-0">
         {% trans %}Challenges{% endtrans %}
       </h1>
+      {#
+        Plain dispatchEvent rather than Alpine's $dispatch: this button is
+        outside the briefing component's scope, and $dispatch outside an
+        x-data tree is a silent no-op.
+      #}
+      <button type="button" class="btn btn-outline-light btn-sm"
+              onclick="window.dispatchEvent(new CustomEvent('dwr-open-briefing'))">
+        <i class="fas fa-info-circle" aria-hidden="true"></i>
+        {% trans %}Briefing{% endtrans %}
+      </button>
     </div>
   </div>
 
@@ -16,9 +175,9 @@
       </div>
     </div>
 
-    <div 
-      x-data="ChallengeBoard" 
-      @load-challenges.window="loadChallenges()" 
+    <div
+      x-data="ChallengeBoard"
+      @load-challenges.window="loadChallenges()"
       @load-challenge.window="loadChallenge($event.detail)"
     >
       <div

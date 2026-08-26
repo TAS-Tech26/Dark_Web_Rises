@@ -3,142 +3,174 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CTF Video Player</title>
-  <style>
-    body {
-      background-color: #212529; 
-      color: white;
-      font-family: sans-serif;
-      margin: 0;
-      padding: 40px 20px; /* Adds some space at the top of the page */
-    }
+  <title>Session Tape</title>
 
-    /* The new Flexbox wrapper that holds both columns */
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" media="print" onload="this.media='all'"
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Space+Grotesk:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="../dwr-theme.css">
+
+  <style>
+    /* ================================================================
+       PUZZLE-CRITICAL — DO NOT CHANGE
+       ----------------------------------------------------------------
+       #spec-video must start hidden. The script toggles it to 'block',
+       and the whole challenge is that the player finds the spectrogram
+       view themselves. Showing it by default gives the answer away.
+       (The inline style="display:none" on the element is the original
+       mechanism; this rule is a belt-and-braces duplicate of it.)
+       ================================================================ */
+    #spec-video {
+      display: none;
+    }
+    /* =============== END PUZZLE-CRITICAL =========================== */
+
     .layout-wrapper {
       display: flex;
-      justify-content: center; /* Centers the whole block horizontally */
-      align-items: flex-start; /* Aligns both columns to the top */
-      gap: 40px; /* The space between the videos and the text */
-      max-width: 1000px; 
-      margin: 0 auto;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 28px;
     }
 
-    /* Left Column: The Video Player */
-    .ctf-container { 
-      flex: 1; /* Allows it to scale */
-      max-width: 600px; 
-      text-align: center; 
-    }
-    .video-box { 
-      width: 100%; 
-      height: auto; 
-      margin-bottom: 15px; 
-      border-radius: 8px; 
-      box-shadow: 0 4px 8px rgba(0,0,0,0.5); /* Optional: Adds a nice shadow */
-    }
-    .controls { 
-      margin-bottom: 15px; 
-      display: flex; 
-      justify-content: center; 
-      gap: 15px; 
-    }
-    button, select { 
-      padding: 8px 12px; 
-      cursor: pointer; 
-      border-radius: 4px; 
-      background-color: #333;
-      color: white;
-      border: 1px solid #555;
+    .ctf-container { flex: 1; max-width: 620px; }
+    .text-content  { flex: 1; max-width: 380px; }
+
+    .video-box {
+      width: 100%;
+      height: auto;
+      display: block;
+      margin-bottom: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background-color: #000;
     }
 
-    /* Right Column: The Text Description */
-    .text-content {
-      flex: 1;
-      max-width: 350px;
-      background-color: #2c3034; /* Slightly lighter background to make it pop */
-      padding: 25px;
-      border-radius: 8px;
-      border: 1px solid #444;
-      line-height: 1.6;
+    .controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
     }
-    .text-content h2 {
-      margin-top: 0;
-      color: #00a8ff; /* Adds a bit of hacker-style color to the title */
+
+    .text-content p {
+      color: var(--muted-foreground);
+      font-size: 15px;
     }
+
+    .flag-format {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px dashed var(--border);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      color: var(--muted-foreground);
+    }
+
+    .flag-format code { color: var(--neon); }
   </style>
 </head>
 <body>
 
-  <div class="layout-wrapper">
-    
-    <!-- LEFT COLUMN: Videos -->
-    <div class="ctf-container">
-      <!-- Main Video -->
-      <video id="main-video" class="video-box" controls>
-        <source src="cashmoney.mp4" type="video/mp4">
-      </video>
+  <div class="dwr-shell">
 
-      <!-- Spectrogram Video (Hidden by default) -->
-      <video id="spec-video" class="video-box" style="display: none;" muted>
-        <source src="cashmoney.mp4" type="video/mp4">
-      </video>
-
-      <div class="controls">
-        <button id="toggle-spec" onclick="toggleSpectrogram()">View Spectrogram</button>
-        
-        <select id="speed-select" onchange="changeSpeed()">
-          <option value="-2">Reverse 2x</option>
-          <option value="-1.5">Reverse 1.5x</option>
-          <option value="1" selected>Normal 1x</option>
-          <option value="1.5">Forward 1.5x</option>
-          <option value="2">Forward 2x</option>
-        </select>
-      </div>
+    <div class="dwr-header">
+      <div class="dwr-eyebrow">// session tape</div>
+      <h1>Session <span class="dwr-accent">Tape</span></h1>
+      <p>Recovered clinical recording.</p>
     </div>
 
-    <!-- RIGHT COLUMN: Text -->
-    <div class="text-content">
-      <h2>Challenge Briefing</h2>
-      <p>
-        A good clinician always listens closely to their patients, but secrets require you to reverse the arrow of time. 
-        Once the sound flows backward, do not trust your ears, trust your eyes. 
-        Open the terminal's frequency visualizer to look at the heat map of the audio track.
-      </p>
-      <p>
-        The vertical bars of light hide a secret command written in Morse Code. 
-        But beware: when time flips, the message mirrors. Trace the code from right to left to break the first lock.
-      </p>
-      <p><strong>Flag Format:</strong> CTF{your_decoded_string}</p>
+    <div class="layout-wrapper">
+
+      <!-- LEFT COLUMN: Videos -->
+      <div class="ctf-container">
+        <div class="dwr-panel">
+          <div class="dwr-eyebrow">// playback</div>
+
+          <!-- Main Video -->
+          <video id="main-video" class="video-box" controls>
+            <source src="cashmoney.mp4" type="video/mp4">
+          </video>
+
+          <!-- Spectrogram Video (Hidden by default) -->
+          <video id="spec-video" class="video-box" style="display: none;" muted>
+            <source src="spectrogram_1x.mp4" type="video/mp4">
+          </video>
+
+          <div class="controls">
+            <button id="toggle-spec" class="dwr-btn" onclick="toggleSpectrogram()">View Spectrogram</button>
+
+            <select id="speed-select" class="dwr-select" onchange="changeSpeed()">
+              <option value="-1.5">Reverse 1.5x</option>
+              <option value="-1">Reverse 1x</option>
+              <option value="1" selected>Normal 1x</option>
+              <option value="1.5">Forward 1.5x</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: Text -->
+      <div class="text-content">
+        <div class="dwr-panel dwr-panel--elevated">
+          <div class="dwr-eyebrow">// briefing</div>
+          <h2 class="dwr-magenta" style="font-size:1.25rem;">Listen Backwards</h2>
+          <p>
+            A good clinician always listens closely to their patients, but secrets
+            require you to reverse the arrow of time. Once the sound flows backward, do
+            not trust your ears, trust your eyes. Open the terminal's frequency
+            visualizer to look at the heat map of the audio track.
+          </p>
+          <p>
+            The vertical bars of light hide a secret command written in Morse Code. But
+            beware: when time flips, the message mirrors. Trace the code from right to
+            left to break the first lock.
+          </p>
+          <div class="flag-format">
+            Flag format: <code>CTF{your_decoded_string}</code>
+          </div>
+        </div>
+      </div>
+
     </div>
 
   </div>
 
   <script>
+    /* ================================================================
+       PUZZLE-CRITICAL — source maps and the two-video sync.
+       Taken from the updated `dwr_full` branch, with one correction
+       noted below.
+       ================================================================ */
     const mainVideo = document.getElementById('main-video');
     const specVideo = document.getElementById('spec-video');
     const toggleBtn = document.getElementById('toggle-spec');
 
     const mainSources = {
-        "-2": "absrad.mp4",
         "-1.5": "uumuu.mp4",
-        "1": "cashmoney.mp4",
-        "1.5": "nkg.mp4",
-        "2": "garama.mp4"
+        "-1": "cashmoney.mp4",
+        "1": "nkg.mp4",
+        "1.5": "garama.mp4"
     };
 
     const specSources = {
-        "-2": "absrad.mp4",
-        "-1.5": "uumuu.mp4",
-        "1": "cashmoney.mp4",
-        "1.5": "nkg.mp4",
-        "2": "garama.mp4"
+        // CORRECTED. The dwr_full branch spelled this entry "reverse_"
+        // while the file committed beside it is spelled "reversed_", so the
+        // request 404'd and "Reverse 1.5x" rendered an empty spectrogram --
+        // the exact setting the briefing sends players to. Keep the spelling
+        // below in step with the actual filename on disk.
+        "-1.5": "spectrogram_reversed_1point5x.mp4",
+        "-1": "spectrogram_reversed.mp4",
+        "1": "spectrogram_1x.mp4",
+        "1.5": "spectrogram_1point5x.mp4"
     };
 
     function toggleSpectrogram() {
       if (specVideo.style.display === 'none') {
         specVideo.style.display = 'block';
         toggleBtn.innerText = 'Hide Spectrogram';
-        specVideo.currentTime = mainVideo.currentTime; 
+        specVideo.currentTime = mainVideo.currentTime;
       } else {
         specVideo.style.display = 'none';
         toggleBtn.innerText = 'View Spectrogram';

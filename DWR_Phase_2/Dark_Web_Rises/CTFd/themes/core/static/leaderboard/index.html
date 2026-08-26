@@ -3,156 +3,149 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Global CTF Leaderboards</title>
+  <title>Final Standings — Dark Web Rises</title>
+
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" media="print" onload="this.media='all'"
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Space+Grotesk:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="../dwr-theme.css">
+
   <style>
-    body {
-      background-color: #121212;
-      color: #e0e0e0;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      margin: 0;
-      padding: 30px;
-    }
-    h1 {
-      text-align: center;
-      color: #00ffcc;
-      margin-bottom: 10px;
-      font-size: 2.5rem;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-    }
-    .generated {
-      text-align: center;
-      color: #707070;
-      font-size: 0.85rem;
-      margin-bottom: 40px;
-    }
-    /* Container to hold the 3 boards side-by-side */
+    /* No puzzle logic here, but the element IDs below are contractual:
+       final_leaderboard.py writes scores.json next to this file and the
+       script populates #phase1-body, #ctf-body, #combined-body and
+       #generated. The error path replaces #boards. Renaming any of them
+       breaks the winner reveal. */
+
     .leaderboard-container {
       display: flex;
       flex-wrap: wrap;
-      gap: 30px;
+      gap: 22px;
       justify-content: center;
+      align-items: flex-start;
     }
-    /* Individual leaderboard boxes */
+
     .board {
-      background-color: #1e1e1e;
-      border: 1px solid #333;
-      border-radius: 8px;
-      padding: 20px;
       flex: 1;
       min-width: 300px;
-      max-width: 450px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      max-width: 440px;
     }
+
     .board h2 {
       text-align: center;
-      margin-top: 0;
-      color: #ffffff;
-      border-bottom: 2px solid #00ffcc;
-      padding-bottom: 10px;
-    }
-    /* Table Styling */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 15px;
-    }
-    th, td {
-      padding: 12px 10px;
-      text-align: left;
-      border-bottom: 1px solid #333;
-    }
-    th {
-      color: #a0a0a0;
-      font-weight: 600;
+      font-size: 1.05rem;
       text-transform: uppercase;
-      font-size: 0.85rem;
+      letter-spacing: 0.12em;
+      padding-bottom: 12px;
+      margin-bottom: 4px;
+      border-bottom: 1px solid color-mix(in oklab, var(--neon) 40%, var(--border));
     }
-    tr:nth-child(even) {
-      background-color: #252525;
-    }
-    tr:hover {
-      background-color: #333333;
-    }
-    .rank {
-      font-weight: bold;
-      color: #00ffcc;
-      width: 40px;
-    }
-    .team-name {
-      font-weight: 600;
-    }
-    .error {
+
+    .generated {
       text-align: center;
-      color: #ff5555;
-      background: #1e1e1e;
-      border: 1px solid #552222;
-      border-radius: 8px;
-      padding: 20px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted-foreground);
+      margin: 0 0 34px;
+    }
+
+    .page-head { text-align: center; margin-bottom: 8px; }
+
+    .rank {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: var(--neon);
+      width: 46px;
+    }
+
+    .team-name { font-weight: 600; }
+
+    td:not(.team-name) { font-family: var(--font-mono); font-size: 13px; }
+
+    .final-score { color: var(--neon); font-weight: 700; }
+
+    .no-data { text-align: center; color: var(--muted-foreground); }
+
+    .error {
       max-width: 700px;
       margin: 30px auto;
+      text-align: center;
     }
-    .error code {
-      color: #ffcc66;
-    }
+
+    .error code { color: var(--warning); }
   </style>
 </head>
 <body>
-  <h1>Final Operation Results</h1>
-  <p class="generated" id="generated"></p>
-  <div class="leaderboard-container" id="boards">
 
-    <!-- Phase 1 Board -->
-    <div class="board">
-      <h2>Phase 1</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Rank</th>
-            <th>Team</th>
-            <th>Raw</th>
-            <th>Norm</th>
-          </tr>
-        </thead>
-        <tbody id="phase1-body">
-          <!-- Rows injected by JS -->
-        </tbody>
-      </table>
+  <div class="dwr-shell">
+
+    <div class="page-head">
+      <div class="dwr-eyebrow">// operation complete</div>
+      <h1>Final <span class="dwr-accent">Standings</span></h1>
     </div>
-    <!-- CTFd Board -->
-    <div class="board">
-      <h2>CTF Phase</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Rank</th>
-            <th>Team</th>
-            <th>Raw</th>
-            <th>Norm</th>
-          </tr>
-        </thead>
-        <tbody id="ctf-body">
-          <!-- Rows injected by JS -->
-        </tbody>
-      </table>
+
+    <p class="generated" id="generated"></p>
+
+    <div class="leaderboard-container" id="boards">
+
+      <!-- Phase 1 Board -->
+      <div class="board dwr-panel">
+        <h2>Phase 1</h2>
+        <table class="dwr-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Team</th>
+              <th>Raw</th>
+              <th>Norm</th>
+            </tr>
+          </thead>
+          <tbody id="phase1-body">
+            <!-- Rows injected by JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- CTFd Board -->
+      <div class="board dwr-panel">
+        <h2>CTF Phase</h2>
+        <table class="dwr-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Team</th>
+              <th>Raw</th>
+              <th>Norm</th>
+            </tr>
+          </thead>
+          <tbody id="ctf-body">
+            <!-- Rows injected by JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Final Combined Board -->
+      <div class="board dwr-panel dwr-panel--neon">
+        <h2 class="dwr-accent">Combined Overall</h2>
+        <table class="dwr-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Team</th>
+              <th>Final Score</th>
+            </tr>
+          </thead>
+          <tbody id="combined-body">
+            <!-- Rows injected by JS -->
+          </tbody>
+        </table>
+      </div>
     </div>
-    <!-- Final Combined Board -->
-    <div class="board">
-      <h2>Combined Overall</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Rank</th>
-            <th>Team</th>
-            <th>Final Score</th>
-          </tr>
-        </thead>
-        <tbody id="combined-body">
-          <!-- Rows injected by JS -->
-        </tbody>
-      </table>
-    </div>
+
   </div>
+
   <script>
     // Written next to this file by scripts/final_leaderboard.py. Relative so
     // it works regardless of the host the CTF is served from.
@@ -180,7 +173,7 @@
         console.error("Error loading scores:", error);
         document.getElementById('boards').style.display = 'none';
         const box = document.createElement('div');
-        box.className = 'error';
+        box.className = 'error dwr-panel dwr-note--error';
         box.innerHTML =
           "<strong>Failed to load scores.</strong><br><br>" +
           "Run <code>python scripts/final_leaderboard.py</code> to generate " +
@@ -198,8 +191,7 @@
         const tr = document.createElement('tr');
         const td = document.createElement('td');
         td.colSpan = hasRawData ? 4 : 3;
-        td.style.textAlign = 'center';
-        td.style.color = '#707070';
+        td.className = 'no-data';
         td.textContent = 'No data';
         tr.appendChild(td);
         tbody.appendChild(tr);
@@ -231,8 +223,7 @@
           tr.appendChild(norm);
         } else {
           const score = document.createElement('td');
-          score.style.color = '#00ffcc';
-          score.style.fontWeight = 'bold';
+          score.className = 'final-score';
           score.textContent = row.score;
           tr.appendChild(score);
         }

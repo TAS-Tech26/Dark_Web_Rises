@@ -3,57 +3,88 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hidden Text Challenge</title>
+  <title>Patient Zero — Case Archive</title>
+
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" media="print" onload="this.media='all'"
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Space+Grotesk:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="../dwr-theme.css">
+
   <style>
-    body {
-      background-color: #212529; 
-      color: #f8f9fa; 
-      font-family: monospace;
-      padding: 40px;
-      text-align: center;
-      font-size: 20px;
-    }
+    /* ================================================================
+       PUZZLE-CRITICAL — DO NOT CHANGE
+       ----------------------------------------------------------------
+       The whole challenge is that this text is rendered invisible and is
+       revealed only by dragging a selection across it. Give .secret-text
+       any colour, any background, any opacity, and the challenge is over.
 
-    .log-box {
-      background-color: #1c1e22;
-      border: 1px solid #444;
-      border-radius: 8px;
-      padding: 30px;
-      max-width: 600px;
-      margin: 0 auto;
-    }
-
-  
+       The ::selection pair below MUST stay: it is more specific than the
+       global ::selection in dwr-theme.css, so it wins and reveals in the
+       intended green rather than the site accent. Removing it does not
+       break the puzzle, but it does change what the player sees.
+       ================================================================ */
+    .case-body p.secret-text,
     .secret-text {
-      color: transparent; 
+      /* Specificity matters here. A generic `.case-body p { color: ... }`
+         rule is (0,1,1) and beats a bare `.secret-text` at (0,1,0) -- which
+         is exactly how these letters became visible once. The compound
+         selector below is (0,2,1) so no page-level paragraph rule can
+         override it. Do not weaken it back to `.secret-text` alone. */
+      color: transparent;
     }
 
-   
     .secret-text::selection {
-      background-color: #00ff00; 
-      color: #000000; 
+      background-color: #00ff00;
+      color: #000000;
     }
 
-    /*mozilla apparently can cause problems or something*/
+    /* Firefox needs its own prefixed rule here. */
     .secret-text::-moz-selection {
       background-color: #00ff00;
       color: #000000;
     }
+    /* =============== END PUZZLE-CRITICAL =========================== */
+
+    .case-body {
+      max-width: 640px;
+      margin: 0 auto;
+    }
+
+    /* :not(.secret-text) so this can never touch the hidden line. */
+    .case-body p:not(.secret-text) {
+      color: var(--muted-foreground);
+      font-size: 15px;
+    }
+
   </style>
 </head>
 <body>
 
-  <div class="layout-wrapper">
-    <div class="log-box">
-      <h2>Patient Zero</h2>
-      <p>Patient Zero disappeared in 1984. Security records show the last confirmed sighting was outside the building where 
-        Vance delivered confidential psychiatric evaluations for the state Sweep across the void, reveal what was never meant 
-        to be visible, then untangle the forgotten place where his obsession first took root.</p>
-      
-      <!-- invisible text -->
-      <p class="secret-text">A N A H D I V A H D U O S</p>
-      
+  <div class="dwr-shell">
+
+    <div class="dwr-header">
+      <div class="dwr-eyebrow">// case archive · subject 00</div>
+      <h1>Patient <span class="dwr-accent">Zero</span></h1>
+      <p>Recovered from the state facility.</p>
     </div>
+
+    <div class="case-body">
+      <div class="dwr-panel dwr-panel--elevated">
+        <div class="dwr-eyebrow">// statement of record</div>
+
+        <p>
+          Patient Zero disappeared in 1984. Security records show the last confirmed
+          sighting was outside the building where Vance delivered confidential
+          psychiatric evaluations for the state. Sweep across the void, reveal what was
+          never meant to be visible, then untangle the forgotten place where his
+          obsession first took root.
+        </p>
+
+        <!-- invisible text -->
+        <p class="secret-text">A N A H D I V A H D U O S</p>
+      </div>
+    </div>
+
   </div>
 
 </body>

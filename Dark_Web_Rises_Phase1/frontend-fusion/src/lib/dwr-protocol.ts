@@ -32,6 +32,10 @@ export const JSONFields = {
   ATTEMPTS_LEFT: "attempts_left",
   /** Per-round breakdown. TEAM_SCORE is now always a number. */
   ROUND_SCORES: "round_scores",
+  /** The team's final image for the round just finished, sent with
+   * ROUND_OVER. Not the same as IMAGE: that one is the in-play image and is
+   * a placeholder for everyone but the active player. */
+  ROUND_IMAGE: "round_image",
   TOTAL_ROUNDS: "total_rounds",
   /** [{ team_id, team_name, score, rank }, ...] */
   LEADERBOARD: "leaderboard",

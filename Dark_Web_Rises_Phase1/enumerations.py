@@ -50,6 +50,12 @@ class JSONFields(StrEnum):
     # ROUND_OVER put an *integer* there, so clients had to type-sniff the
     # same field. TEAM_SCORE is now always a number; the list lives here.
     ROUND_SCORES = "round_scores"
+    # The team's final image for the round just finished, sent with the
+    # ROUND_OVER frame. Distinct from IMAGE, which is the in-play image and
+    # is WAIT_YOUR_TURN_IMAGE for everyone except the player whose turn it
+    # is -- this one goes to the whole team, and for three of the four
+    # members it is the first time they see what their team actually made.
+    ROUND_IMAGE = "round_image"
     TOTAL_ROUNDS = "total_rounds"
     # Full ranked leaderboard: [{team_id, team_name, score, rank}, ...]
     LEADERBOARD = "leaderboard"

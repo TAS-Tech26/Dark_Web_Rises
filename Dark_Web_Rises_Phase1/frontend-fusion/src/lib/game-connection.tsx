@@ -74,6 +74,10 @@ export type GameSnapshot = {
   totalRounds: number;
   rounds: RoundRecord[];
   lastRoundScore: number | null;
+  /** The team's final image for the round just finished. Shown on the round
+   * results screen -- for the three members who were not the last player,
+   * this is the first sight of what the team ended up with. */
+  lastRoundImage: string | null;
   teamScore: number | null;
   teamScores: number[] | null;
   rank: number | null;
@@ -119,6 +123,7 @@ const initialSnapshot: GameSnapshot = {
   totalRounds: TOTAL_ROUNDS,
   rounds: [],
   lastRoundScore: null,
+  lastRoundImage: null,
   teamScore: null,
   teamScores: null,
   rank: null,
@@ -138,11 +143,7 @@ type GameContextValue = GameSnapshot & {
   sendPrompt: (prompt: string) => void;
   skipTurn: () => void;
   resetSession: () => void;
-  /** Clear the current transient error banner. */
-  dismissError: () => void;
   adminStartGame: () => Promise<{ ok: boolean; message: string }>;
-  /** End the event now, keeping scores so far. Backed by POST /admin/abort. */
-  adminAbortGame: () => Promise<{ ok: boolean; message: string }>;
   adminDashboard: () => Promise<AdminDashboard | null>;
 };
 
@@ -201,102 +202,43 @@ const GameContext = createContext<GameContextValue | null>(null);
  *          The player lands on the login screen, which is what a reload
  *          should do.
  *
- * That distinction was the original reason this was memory-only, and the
- * reasoning holds for a LAPTOP, where a reload is a deliberate act. It does not
- * hold for 700 phones. iOS Safari and Chrome on Android routinely DISCARD a
- * backgrounded tab under memory pressure and re-run the document when the user
- * returns -- the player did not reload, they answered a text message. Memory-
- * only meant they came back to an empty login form, retyping a team password
- * mid-round, then waiting out the server's 3s session probe. "Please do not
- * refresh" is not a control we have over an OS tab discard.
+ * sessionStorage could not tell those two apart. It survives a reload, so a
+ * refresh silently signed the player back in -- and because the auto-login
+ * path did not go through `login()`, `username` was never put into state, so
+ * the UI came back logged in under nobody's name. That is the "ghost" half of
+ * the problem, and holding the credentials in memory removes it by
+ * construction rather than by patching the symptom.
  *
- * The "ghost login" that motivated the memory-only choice is separately fixed:
- * the reconnect path in onopen now patches `username` into state before sending
- * the frame, exactly as login() does. Persistence was the heavier remedy for a
- * problem that only needed that one line.
- *
- * sessionStorage rather than localStorage: scoped to the tab, cleared when the
- * tab closes, not shared with other tabs. Every access is wrapped, because it
- * throws in private mode and does not exist during SSR.
+ * It also means credentials are never written to disk, which is a smaller but
+ * real win: sessionStorage is readable by any script on the origin.
  */
 type StoredSession = { username: string; password: string; kind: "player" | "admin" };
 
-const SESSION_KEY = "dwr.session";
-
-// In-memory cache in front of sessionStorage, so the common path never touches
-// storage and an environment that forbids it still works for the socket-drop
-// case.
 let liveSession: StoredSession | null = null;
 
 function readStoredSession(): StoredSession | null {
-  if (liveSession) return liveSession;
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.sessionStorage.getItem(SESSION_KEY);
-    if (raw) liveSession = JSON.parse(raw) as StoredSession;
-  } catch {
-    // Private mode, disabled storage, SSR. Degrade to memory-only.
-  }
   return liveSession;
-}
-
-function writeStoredSession(session: StoredSession) {
-  liveSession = session;
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  } catch {
-    /* memory-only is still correct, just less durable */
-  }
 }
 
 function clearStoredSession() {
   liveSession = null;
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.removeItem(SESSION_KEY);
-  } catch {
-    /* nothing to do */
-  }
 }
 
 export function GameProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GameSnapshot>(initialSnapshot);
   const socketRef = useRef<WebSocket | null>(null);
+  const pendingRef = useRef<string[]>([]);
   const autoLoginRef = useRef(false);
-  // Consecutive failed connection attempts, for the reconnect backoff.
-  const attemptRef = useRef(0);
-  // When the tab was last hidden, so a wake can decide whether to distrust the
-  // connection it woke up holding.
-  const hiddenSinceRef = useRef<number | null>(null);
 
   const patch = useCallback((next: Partial<GameSnapshot>) => {
     setState((prev) => ({ ...prev, ...next }));
   }, []);
 
-  /**
-   * Send if the socket is open. Returns whether it went out.
-   *
-   * Nothing is queued any more, and that is deliberate. The old pending queue
-   * was flushed in onopen BEFORE the re-login frame, so every gameplay frame
-   * held across a wifi blip arrived while the server still had
-   * current_client_type = None and was answered with "Not authenticated" --
-   * destroying the player's prompt on a path that looked, from their side,
-   * exactly like a slow server. The queue also had no age limit and was never
-   * cleared on logout, so a prompt queued in round 2 could replay on a later
-   * socket.
-   *
-   * Every frame this app sends is either time-bound (a prompt, a skip) or
-   * reconstructible (the login, which onopen re-sends from the stored session).
-   * There is nothing worth replaying blind.
-   */
-  const send = useCallback((payload: Record<string, unknown>): boolean => {
+  const send = useCallback((payload: Record<string, unknown>) => {
+    const raw = JSON.stringify(payload);
     const socket = socketRef.current;
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(payload));
-      return true;
-    }
-    return false;
+    if (socket && socket.readyState === WebSocket.OPEN) socket.send(raw);
+    else pendingRef.current.push(raw);
   }, []);
 
   const handleMessage = useCallback(
@@ -337,17 +279,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       if (type === Responses.ERROR_RESPONSE) {
         const message = (data[JSONFields.MESSAGE] as string) ?? "The game server rejected that request.";
         console.warn("Server error frame:", message);
-        // promptPhase MUST be released here. round-1 unmounts the prompt editor
-        // and shows a "transmitting prompt_" spinner while the phase is
-        // "sending", so leaving it set turned every rejected prompt -- not your
-        // turn, rate limited, generation failed -- into a spinner that span for
-        // the rest of the event with no message and no way back.
-        setState((prev) => ({
-          ...prev,
-          socketError: message,
-          loggingIn: false,
-          promptPhase: prev.promptPhase === "sending" ? "idle" : prev.promptPhase,
-        }));
+        patch({ socketError: message, loggingIn: false });
         return;
       }
 
@@ -378,15 +310,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
             gameState,
             teamState,
             connectedMembers: (data[JSONFields.CONNECTED_TEAM_MEMBERS] as number) ?? 0,
-            // The server sends the round on every login response; this handler
-            // never read it, so currentRound stayed 0 until the next ROUND_OVER
-            // frame. A player who reconnected during round 4 was shown
-            // "ROUND 01 / 5", and the same stale value drives isFinalRound on
-            // the break screen -- so they could be told the event continues
-            // when that was the last round.
-            currentRound: (data[JSONFields.ROUND] as number) ?? 0,
-            // Clear any error left over from the disconnect that got us here.
-            socketError: null,
           };
 
 
@@ -401,10 +324,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
             next.turnEndsAt = Date.now() + time * 1000;
             next.promptPhase =
               data[JSONFields.PROMPT_STATUS] === GamePlay.PROMPTED ? "accepted" : "idle";
-            // Also sent by the server for the active player, and also ignored
-            // until now: someone who reconnected after two invalid prompts was
-            // shown a full budget of 3 attempts remaining.
-            next.attemptsLeft = (data[JSONFields.ATTEMPTS_LEFT] as number) ?? 3;
           }
 
           if (teamState === TeamState.DONE) {
@@ -486,7 +405,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
         if (gameState === GameState.COUNTDOWN) {
           patch({ gameState, countdownEndsAt: Date.now() + time * 1000 });
         } else if (gameState === GameState.GAME_RUNNING) {
-          patch({ gameState, countdownEndsAt: null });
+          // Drop the previous round's image here rather than on arrival at
+          // the results screen: leaving it set means a player who lands back
+          // on that screen mid-round sees the wrong round's picture.
+          patch({ gameState, countdownEndsAt: null, lastRoundImage: null });
         } else if (gameState === GameState.ROUND_OVER) {
           const round = (data[JSONFields.ROUND] as number) ?? 0;
           const roundScore = (data[JSONFields.ROUND_SCORE] as number) ?? 0;
@@ -495,6 +417,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
             gameState,
             currentRound: round,
             lastRoundScore: roundScore,
+            lastRoundImage: (data[JSONFields.ROUND_IMAGE] as string) ?? null,
             teamScore: (data[JSONFields.TEAM_SCORE] as number) ?? prev.teamScore,
             rounds: [...prev.rounds.filter((r) => r.round !== round), { round, score: roundScore }].sort(
               (a, b) => a.round - b.round,
@@ -580,25 +503,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
 
-    // Exponential backoff with FULL jitter.
-    //
-    // A fixed 2s retry meant an AP reboot dropped all 700 sockets at the same
-    // instant and they reconnected on the same 2-second beat, in phase, for as
-    // long as the problem lasted. Each reconnect carries a login frame, and the
-    // server verifies it with a ~56ms PBKDF2 -- 700 of those is ~39s of CPU per
-    // wave, arriving every 2s. Waves stack and never drain. The per-socket
-    // rate limit does not help, because each reconnect is a NEW socket.
-    //
-    // Full jitter (a uniform pick from [0, base]) rather than a fixed delay
-    // plus noise: it spreads a synchronised herd across the whole window
-    // instead of preserving its shape.
-    const scheduleRetry = () => {
-      if (cancelled) return;
-      const attempt = Math.min(attemptRef.current++, 6);
-      const base = Math.min(30000, 500 * 2 ** attempt);
-      retry = setTimeout(open, Math.random() * base);
-    };
-
     const open = () => {
       if (cancelled) return;
       const url = getWebSocketUrl();
@@ -610,18 +514,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
         socket = new WebSocket(url);
       } catch {
         patch({ connecting: false, socketError: "Unable to reach the game server." });
-        scheduleRetry();
+        retry = setTimeout(open, 3000);
         return;
       }
       socketRef.current = socket;
 
       socket.onopen = () => {
-        attemptRef.current = 0;
         patch({ connected: true, connecting: false, socketError: null });
+        const queued = pendingRef.current;
+        pendingRef.current = [];
+        queued.forEach((raw) => socket.send(raw));
 
-        // Re-authenticate after a reconnect. Nothing else is sent before this
-        // -- see the note on send() about the old pending queue arriving ahead
-        // of the login and being rejected as unauthenticated.
+        // Re-authenticate after a refresh / reconnect.
         const stored = readStoredSession();
         if (stored && !autoLoginRef.current) {
           autoLoginRef.current = true;
@@ -656,81 +560,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
         socketRef.current = null;
         autoLoginRef.current = false;
         patch({ connected: false, connecting: false });
-        scheduleRetry();
+        if (!cancelled) retry = setTimeout(open, 2000);
       };
     };
 
-    // Wake handling. This is the dominant failure mode on a phone.
-    //
-    // When the screen locks or the tab is backgrounded, the OS suspends the
-    // page and the TCP connection is frequently NOT torn down cleanly, so
-    // `onclose` may not fire for minutes -- or at all. The server has already
-    // given up long before that (three failed sends at 1.5s), so the player
-    // unlocks their phone to a page that still reads "LIVE", a timer still
-    // ticking, and no frames arriving. They miss the turn and their team is
-    // penalised.
-    //
-    // A true application heartbeat needs a ping message the server understands;
-    // there isn't one, and inventing a frame here would just earn an
-    // ERROR_RESPONSE. What we can do without touching the protocol is distrust
-    // the connection we woke up holding: if the tab was hidden long enough for
-    // the server to have timed us out, force a reconnect rather than assuming
-    // the socket survived. A reconnect is cheap and re-authenticates itself; a
-    // zombie socket costs the player their turn.
-    const STALE_AFTER_HIDDEN_MS = 20000;
-
-    const reconnectNow = () => {
-      if (cancelled) return;
-      if (retry) clearTimeout(retry);
-      attemptRef.current = 0; // a wake is not congestion; do not back off
-      const socket = socketRef.current;
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        // Looks alive, but we cannot tell from here. Closing routes us through
-        // the normal reconnect path, which re-logs in from the stored session.
-        socket.close();
-        return; // onclose -> scheduleRetry -> open
-      }
-      socketRef.current = null;
-      open();
-    };
-
-    const onVisibility = () => {
-      if (typeof document === "undefined") return;
-      if (document.visibilityState === "hidden") {
-        hiddenSinceRef.current = Date.now();
-        return;
-      }
-      const hiddenFor = hiddenSinceRef.current === null ? 0 : Date.now() - hiddenSinceRef.current;
-      hiddenSinceRef.current = null;
-      const socket = socketRef.current;
-      const open_ = socket && socket.readyState === WebSocket.OPEN;
-      if (!open_ || hiddenFor > STALE_AFTER_HIDDEN_MS) reconnectNow();
-    };
-
-    const onOnline = () => reconnectNow();
-
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", onVisibility);
-    }
-    if (typeof window !== "undefined") {
-      window.addEventListener("online", onOnline);
-      window.addEventListener("pageshow", onVisibility);
-    }
-
-    // Spread the very first connection too. 700 people tapping the link when
-    // the moderator says "go" is the same herd, before any socket has dropped.
-    retry = setTimeout(open, Math.random() * 2000);
+    open();
 
     return () => {
       cancelled = true;
       if (retry) clearTimeout(retry);
-      if (typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", onVisibility);
-      }
-      if (typeof window !== "undefined") {
-        window.removeEventListener("online", onOnline);
-        window.removeEventListener("pageshow", onVisibility);
-      }
       const socket = socketRef.current;
       socketRef.current = null;
       if (socket) {
@@ -743,18 +581,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     (username: string, password: string) => {
       patch({ loggingIn: true, loginError: null, username });
-      writeStoredSession({ username, password, kind: "player" });
+      liveSession = { username, password, kind: "player" };
       autoLoginRef.current = true;
-      // If the socket is not open the frame is dropped rather than queued --
-      // onopen re-sends it from the session we just stored, which is the same
-      // frame and correctly ordered.
-      if (!send({
+      send({
         [JSONFields.TYPE]: Login.LOGIN,
         [JSONFields.USERNAME]: username,
         [JSONFields.PASSWORD]: password,
-      })) {
-        autoLoginRef.current = false;
-      }
+      });
     },
     [patch, send],
   );
@@ -765,8 +598,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     send({ [JSONFields.TYPE]: Login.LOGOUT });
   }, [send]);
 
-  const dismissError = useCallback(() => patch({ socketError: null }), [patch]);
-
   const resetSession = useCallback(() => {
     clearStoredSession();
     autoLoginRef.current = false;
@@ -775,22 +606,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const sendPrompt = useCallback(
     (prompt: string) => {
-      // Phase is set only AFTER the frame actually leaves. Setting it first
-      // locked the editor even when the socket was down, so an offline player
-      // was shown a spinner for a prompt that was never sent.
-      const sent = send({
+      patch({ promptPhase: "sending" });
+      send({
         [JSONFields.TYPE]: GamePlay.PROMPT_OUT,
         [JSONFields.STATUS]: GamePlay.PROMPTED,
         [JSONFields.PROMPT]: prompt,
       });
-      if (!sent) {
-        patch({
-          promptPhase: "idle",
-          socketError: "You are offline. Reconnecting -- try again in a moment.",
-        });
-        return;
-      }
-      patch({ promptPhase: "sending" });
     },
     [patch, send],
   );
@@ -811,18 +632,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // trusting it directly would let anyone set that header and hit
   // /admin/rungame without ever knowing an admin password, as long as some
   // admin happened to be connected.
-  // A 401/403 means this admin session is gone server-side -- the token was
-  // revoked, or a second dashboard tab was opened and closed, which empties
-  // connected_admins and invalidates the surviving tab's token. Without
-  // clearing local state the UI stayed on a dashboard that silently 403'd every
-  // poll while still rendering the last numbers it had, and even Log Out did
-  // not escape it. Dropping the credentials sends the moderator back to the
-  // login screen, which is a page they know how to use.
-  const clearDeadAdminSession = useCallback(() => {
-    clearStoredSession();
-    patch({ adminId: null, adminToken: null });
-  }, [patch]);
-
   const adminStartGame = useCallback(async () => {
     if (adminId === null || !adminToken) return { ok: false, message: "Admin session not authenticated." };
     try {
@@ -831,10 +640,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
         headers: { "X-Admin-Token": adminToken },
       });
       const body = (await res.json().catch(() => ({}))) as { detail?: string; message?: string };
-      if (res.status === 401 || res.status === 403) {
-        clearDeadAdminSession();
-        return { ok: false, message: "Admin session expired. Please log in again." };
-      }
       if (!res.ok) {
         return { ok: false, message: body.detail ?? `Request failed (${res.status})` };
       }
@@ -842,29 +647,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     } catch {
       return { ok: false, message: "Unable to reach the game server." };
     }
-  }, [adminId, adminToken, clearDeadAdminSession]);
-
-  /** End the event now, keeping the scores collected so far. */
-  const adminAbortGame = useCallback(async () => {
-    if (adminId === null || !adminToken) return { ok: false, message: "Admin session not authenticated." };
-    try {
-      const res = await fetch(`${getApiBaseUrl()}/admin/abort`, {
-        method: "POST",
-        headers: { "X-Admin-Token": adminToken },
-      });
-      const body = (await res.json().catch(() => ({}))) as { detail?: string; message?: string };
-      if (res.status === 401 || res.status === 403) {
-        clearDeadAdminSession();
-        return { ok: false, message: "Admin session expired. Please log in again." };
-      }
-      if (!res.ok) {
-        return { ok: false, message: body.detail ?? `Request failed (${res.status})` };
-      }
-      return { ok: true, message: body.message ?? "Game aborted; final scores sent." };
-    } catch {
-      return { ok: false, message: "Unable to reach the game server." };
-    }
-  }, [adminId, adminToken, clearDeadAdminSession]);
+  }, [adminId, adminToken]);
 
   const adminDashboard = useCallback(async () => {
     if (adminId === null || !adminToken) return null;
@@ -872,16 +655,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const res = await fetch(`${getApiBaseUrl()}/admin/dashboard`, {
         headers: { "X-Admin-Token": adminToken },
       });
-      if (res.status === 401 || res.status === 403) {
-        clearDeadAdminSession();
-        return null;
-      }
       if (!res.ok) return null;
       return (await res.json()) as AdminDashboard;
     } catch {
       return null;
     }
-  }, [adminId, adminToken, clearDeadAdminSession]);
+  }, [adminId, adminToken]);
 
   const value = useMemo<GameContextValue>(
     () => ({
@@ -891,15 +670,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       sendPrompt,
       skipTurn,
       resetSession,
-      dismissError,
       adminStartGame,
-      adminAbortGame,
       adminDashboard,
     }),
-    [
-      state, login, logout, sendPrompt, skipTurn, resetSession, dismissError,
-      adminStartGame, adminAbortGame, adminDashboard,
-    ],
+    [state, login, logout, sendPrompt, skipTurn, resetSession, adminStartGame, adminDashboard],
   );
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

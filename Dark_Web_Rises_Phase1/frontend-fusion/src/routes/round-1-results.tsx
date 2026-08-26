@@ -3,7 +3,9 @@ import { useEffect } from "react";
 import { TopNav } from "@/components/dwr/TopNav";
 import { Panel } from "@/components/dwr/Panel";
 import { ScoreCard } from "@/components/dwr/ScoreCard";
+import { ImageViewer } from "@/components/dwr/ImageViewer";
 import { useGame, useSecondsUntil } from "@/lib/game-connection";
+import { toImageSrc } from "@/lib/image-src";
 import { GameState, TeamState } from "@/lib/dwr-protocol";
 import { CheckCircle2 } from "lucide-react";
 
@@ -29,6 +31,9 @@ function RoundResults() {
 
   const completedRound = Math.max(1, game.currentRound);
   const isFinalRound = completedRound >= game.totalRounds;
+  // The whole team sees this, including the three members who spent the
+  // round looking at the "wait your turn" placeholder.
+  const finalImage = toImageSrc(game.lastRoundImage);
   const bestRound = game.rounds.reduce<number | null>(
     (best, r) => (best === null || r.score > best ? r.score : best),
     null,
@@ -143,6 +148,32 @@ function RoundResults() {
               })}
             </div>
           </Panel>
+
+          {/* Rendered only when there is an image. A panel containing the
+              viewer's empty-state placeholder would read as "something is
+              loading" on a screen where nothing further is coming. */}
+          {finalImage && (
+            <Panel className="mt-6 overflow-hidden">
+              <div className="border-b border-border px-5 py-3">
+                <h3 className="font-mono text-sm uppercase tracking-[0.25em] text-neon">
+                  Where Round {completedRound} Ended Up
+                </h3>
+              </div>
+              <div className="px-5 py-6">
+                <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
+                  The last image in your team&apos;s chain. Your round score is how
+                  close this landed to the reference image you started from.
+                </p>
+                <div className="mx-auto w-full max-w-md">
+                  <ImageViewer
+                    src={finalImage}
+                    alt={`Team's final image for round ${completedRound}`}
+                    label={`Round ${String(completedRound).padStart(2, "0")} · final image`}
+                  />
+                </div>
+              </div>
+            </Panel>
+          )}
         </div>
       </main>
     </div>
