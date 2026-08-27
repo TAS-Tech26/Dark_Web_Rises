@@ -69,35 +69,16 @@ function Round1() {
 
         <div className="relative">
           {/* Header */}
-          <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                // round {roundLabel}
-              </div>
-              <h1 className="font-mono text-3xl font-black uppercase tracking-tight text-foreground sm:text-4xl">
-                Lost In <span className="text-neon">Translation</span>
-              </h1>
+          {/* The turn timer used to live here. It now sits at the foot of the
+              action column, directly under the prompt editor -- see the note
+              there for why. */}
+          <div className="mb-6">
+            <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+              // round {roundLabel}
             </div>
-
-            {/* sticky on small screens: the prompt editor sits below the fold
-                on a phone, and a timer that scrolls away while you type is the
-                one piece of state you cannot afford to lose sight of. */}
-            <Panel
-              className="sticky top-2 z-20 px-6 py-4 text-center lg:static"
-              glow={secondsLeft <= 10 ? "magenta" : "neon"}
-            >
-              <div className="flex items-center justify-center gap-2 font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                <Clock className="h-3 w-3" /> Turn Timer
-              </div>
-              <div
-                className={`mt-1 font-mono text-4xl font-black tabular-nums ${
-                  secondsLeft <= 10 ? "text-magenta" : "text-neon"
-                }`}
-              >
-                {String(Math.floor(secondsLeft / 60)).padStart(2, "0")}:
-                {String(secondsLeft % 60).padStart(2, "0")}
-              </div>
-            </Panel>
+            <h1 className="font-mono text-3xl font-black uppercase tracking-tight text-foreground sm:text-4xl">
+              Lost In <span className="text-neon">Translation</span>
+            </h1>
           </div>
 
           {/* Server-side errors were previously rendered ONLY on the login
@@ -384,6 +365,42 @@ function Round1() {
                   </form>
                 </Panel>
               )}
+
+              {/* Turn timer.
+                  Last child of the action column on purpose, so it reads
+                  directly under whatever the player is currently acting on --
+                  the prompt editor on your turn, the spectator panel on
+                  someone else's. Clicking Review Prompt opens the
+                  confirmation box INSIDE the editor above, so the editor
+                  grows and this moves down with it rather than the
+                  confirmation box appearing underneath a fixed timer.
+
+                  One instance, not two. A second timer rendered in the header
+                  for the spectator case would be a second copy of the same
+                  countdown, and the moment they disagreed by a second the
+                  wrong one would be the one someone was looking at.
+
+                  sticky bottom-2 below lg: on a phone the editor is taller
+                  than the viewport, so in plain flow the timer would sit off
+                  screen exactly while you type. Pinned to the bottom edge it
+                  stays visible and still sits below the prompt box in
+                  document order. Static from lg up, where it all fits. */}
+              <Panel
+                className="sticky bottom-2 z-20 px-6 py-4 text-center lg:static"
+                glow={secondsLeft <= 10 ? "magenta" : "neon"}
+              >
+                <div className="flex items-center justify-center gap-2 font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
+                  <Clock className="h-3 w-3" /> Turn Timer
+                </div>
+                <div
+                  className={`mt-1 font-mono text-4xl font-black tabular-nums ${
+                    secondsLeft <= 10 ? "text-magenta" : "text-neon"
+                  }`}
+                >
+                  {String(Math.floor(secondsLeft / 60)).padStart(2, "0")}:
+                  {String(secondsLeft % 60).padStart(2, "0")}
+                </div>
+              </Panel>
             </div>
           </div>
         </div>
