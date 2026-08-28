@@ -1,238 +1,253 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Image Analysis — Case Profile</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Analysis — Case Profile</title>
 
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" media="print" onload="this.media='all'"
-        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Space+Grotesk:wght@400;500;700&display=swap">
-  <link rel="stylesheet" href="../dwr-theme.css">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" media="print" onload="this.media='all'"
+          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Space+Grotesk:wght@400;500;700&display=swap">
+    <link rel="stylesheet" href="../dwr-theme.css">
 
-  <style>
-    /* ================================================================
-       PUZZLE-CRITICAL — DO NOT CHANGE
-       ----------------------------------------------------------------
-       * .challenge-image keeps cursor:crosshair. It is the only visual
-         cue that the image is interactive, and right-clicking it is the
-         entire challenge.
-       * .info-box and .context-menu MUST start display:none. The script
-         flips them to block; anything that makes them visible up front
-         hands the player the metadata (and the year) for free.
-       ================================================================ */
-    .challenge-image {
-      cursor: crosshair;
-    }
+    <style>
+        /* ================================================================
+           PUZZLE-CRITICAL — DO NOT CHANGE
+           ----------------------------------------------------------------
+           * .challenge-image keeps cursor:crosshair. It is the only visual
+             cue that the image is interactive, and right-clicking it is the
+             entire challenge.
+           * .info-box and .context-menu MUST start display:none. The script
+             flips them to block; anything that makes them visible up front
+             hands the player the metadata (and the year) for free.
+           ================================================================ */
+        .challenge-image {
+            cursor: crosshair;
+        }
 
-    .info-box {
-      display: none;
-    }
+        .info-box {
+            display: none;
+        }
 
-    .context-menu {
-      display: none;
-      position: absolute;
-      z-index: 1000;
-    }
-    /* =============== END PUZZLE-CRITICAL =========================== */
+        .context-menu {
+            display: none;
+            position: absolute;
+            z-index: 1000;
+        }
+        /* =============== END PUZZLE-CRITICAL =========================== */
 
-    .layout-wrapper {
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      gap: 28px;
-    }
+        .layout-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 28px;
+        }
 
-    .left-column { flex: 1; max-width: 540px; }
-    .right-column { flex: 1; max-width: 400px; }
+        .left-column { flex: 1; max-width: 540px; }
+        .right-column { flex: 1; max-width: 400px; }
 
-    .filename {
-      font-family: var(--font-mono);
-      font-size: 12px;
-      letter-spacing: 0.12em;
-      color: var(--cyan);
-      margin: 0 0 12px;
-      word-break: break-all;
-    }
+        .filename {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            letter-spacing: 0.12em;
+            color: var(--cyan);
+            margin: 0 0 12px;
+            word-break: break-all;
+        }
 
-    .challenge-image {
-      width: 100%;
-      height: auto;
-      display: block;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background-color: var(--background);
-    }
+        .challenge-image {
+            width: 100%;
+            height: auto;
+            display: block;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background-color: var(--background);
+        }
 
-    /* Presentation of the revealed panel. Its display:none above is what
-       matters; everything here is how it looks once the script shows it. */
-    .info-box {
-      margin-top: 16px;
-      padding: 16px;
-      background-color: var(--background);
-      border: 1px solid color-mix(in oklab, var(--neon) 35%, var(--border));
-      border-radius: var(--radius);
-      text-align: left;
-      font-family: var(--font-mono);
-      font-size: 12.5px;
-      line-height: 1.7;
-      color: var(--neon);
-      box-shadow: inset 0 0 40px color-mix(in oklab, var(--neon) 6%, transparent);
-    }
+        /* Presentation of the revealed panel. */
+        .info-box {
+            margin-top: 16px;
+            padding: 16px;
+            background-color: var(--background);
+            border: 1px solid color-mix(in oklab, var(--neon) 35%, var(--border));
+            border-radius: var(--radius);
+            text-align: left;
+            font-family: var(--font-mono);
+            font-size: 12.5px;
+            line-height: 1.7;
+            color: var(--neon);
+            box-shadow: inset 0 0 40px color-mix(in oklab, var(--neon) 6%, transparent);
+        }
 
-    .info-box strong { color: var(--foreground); }
+        .info-box strong { color: var(--foreground); }
 
-    .right-column p {
-      color: var(--muted-foreground);
-      font-size: 15px;
-    }
+        .right-column p {
+            color: var(--muted-foreground);
+            font-size: 15px;
+        }
 
-    .right-column p:last-child { margin-bottom: 0; }
+        .right-column p:last-child { margin-bottom: 0; }
 
-    /* Context menu chrome. */
-    .context-menu {
-      background-color: var(--surface-elevated);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
-      padding: 4px;
-      min-width: 200px;
-      list-style-type: none;
-      margin: 0;
-    }
+        /* Context menu chrome. */
+        .context-menu {
+            background-color: var(--surface-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+            padding: 4px;
+            min-width: 200px;
+            list-style-type: none;
+            margin: 0;
+        }
 
-    .context-menu li {
-      padding: 9px 12px;
-      cursor: pointer;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      color: var(--foreground);
-      border-radius: calc(var(--radius) - 3px);
-    }
+        .context-menu li {
+            padding: 9px 12px;
+            cursor: pointer;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--foreground);
+            border-radius: calc(var(--radius) - 3px);
+        }
 
-    .context-menu li:hover {
-      background-color: color-mix(in oklab, var(--neon) 16%, transparent);
-      color: var(--neon);
-    }
-  </style>
+        .context-menu li:hover {
+            background-color: color-mix(in oklab, var(--neon) 16%, transparent);
+            color: var(--neon);
+        }
+
+        /* Flag format badge */
+        .flag-format {
+          margin-top: 24px;
+          font-weight: 600;
+          word-break: break-all;
+        }
+
+        @media (max-width: 768px) {
+            .layout-wrapper {
+                flex-direction: column;
+            }
+            .left-column, .right-column {
+                max-width: 100%;
+            }
+        }
+    </style>
 </head>
 <body>
 
-  <div class="dwr-shell">
+    <div class="dwr-shell">
 
-    <div class="dwr-header">
-      <div class="dwr-eyebrow">// evidence locker</div>
-      <h1>Case <span class="dwr-accent">Profile</span></h1>
-      <p>Evidence item recovered from the clinician's archive.</p>
+        <div class="dwr-header">
+            <div class="dwr-eyebrow">// evidence locker</div>
+            <h1>Case <span class="dwr-accent">Profile</span></h1>
+            <p>Evidence item recovered from the clinician's archive.</p>
+        </div>
+
+        <div class="layout-wrapper">
+
+            <!-- LEFT COLUMN: file, image, and the revealed info panel -->
+            <div class="left-column">
+                <div class="dwr-panel">
+                    <p class="filename">patient_case_profile.png</p>
+
+                    <img src="patient_case_profile.jpg" alt="Target Schematic" class="challenge-image" id="target-img">
+
+                    <!-- Content gets injected here via JavaScript -->
+                    <div class="info-box" id="info-box"></div>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN: lore and description -->
+            <div class="right-column">
+                <div class="dwr-panel dwr-panel--elevated">
+                    <div class="dwr-eyebrow">// briefing</div>
+                    <h2 class="dwr-magenta" style="font-size:1.25rem;">Look Beneath</h2>
+                    <p>
+                        A perfect story is a curated delusion; it only shows you what it wants you
+                        to see. True insight requires looking beneath the canvas to examine the
+                        file's digital skeleton. Force the system to read this case profile's
+                        internal details and properties.
+                    </p>
+                    <p>
+                        Hidden deep within the clinician's background log tags, you will harvest the
+                        4-digit secret year code that initiated the lie. Input that year to open the
+                        case file.
+                    </p>
+
+                    <!-- CTF FLAG FORMAT DISPLAY -->
+                    <div class="dwr-note dwr-note--warn flag-format">
+                      Flag Format: <span class="dwr-accent">ctf{your_answer}</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
     </div>
 
-    <div class="layout-wrapper">
+    <!-- THE CUSTOM CONTEXT MENU (hidden until right-click) -->
+    <ul class="context-menu" id="custom-menu">
+        <li onclick="showInfo('view')">View Full Resolution</li>
+        <li onclick="showInfo('save')">Save Image As...</li>
+        <li onclick="showInfo('properties')">Image Properties</li>
+    </ul>
 
-      <!-- LEFT COLUMN: file, image, and the revealed info panel -->
-      <div class="left-column">
-        <div class="dwr-panel">
-          <p class="filename">patient_case_profile.png</p>
+    <script>
+        /* ================================================================
+           PUZZLE-CRITICAL — logic below is unchanged from the original.
+           The injected strings, especially the 1984 dates in 'properties',
+           are the answer. Do not edit them.
+           ================================================================ */
+        const targetImg = document.getElementById('target-img');
+        const customMenu = document.getElementById('custom-menu');
+        const infoBox = document.getElementById('info-box');
 
-          <img src="ferrir.png" alt="Target Schematic" class="challenge-image" id="target-img">
+        targetImg.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
 
-          <!-- Content gets injected here via JavaScript -->
-          <div class="info-box" id="info-box"></div>
-        </div>
-      </div>
+            customMenu.style.top = `${e.pageY}px`;
+            customMenu.style.left = `${e.pageX}px`;
+            customMenu.style.display = 'block';
+        });
 
-      <!-- RIGHT COLUMN: lore and description -->
-      <div class="right-column">
-        <div class="dwr-panel dwr-panel--elevated">
-          <div class="dwr-eyebrow">// briefing</div>
-          <h2 class="dwr-magenta" style="font-size:1.25rem;">Look Beneath</h2>
-          <p>
-            A perfect story is a curated delusion; it only shows you what it wants you
-            to see. True insight requires looking beneath the canvas to examine the
-            file's digital skeleton. Force the system to read this case profile's
-            internal details and properties.
-          </p>
-          <p>
-            Hidden deep within the clinician's background log tags, you will harvest the
-            4-digit secret year code that initiated the lie. Input that year to open the
-            case file.
-          </p>
-        </div>
-      </div>
+        document.addEventListener('click', function(e) {
+            if (e.target !== targetImg) {
+                customMenu.style.display = 'none';
+            }
+        });
 
-    </div>
+        function showInfo(action) {
+            customMenu.style.display = 'none';
+            infoBox.style.display = 'block';
 
-  </div>
-
-  <!-- THE CUSTOM CONTEXT MENU (hidden until right-click) -->
-  <ul class="context-menu" id="custom-menu">
-    <li onclick="showInfo('view')">View Full Resolution</li>
-    <li onclick="showInfo('save')">Save Image As...</li>
-    <li onclick="showInfo('properties')">Image Properties</li>
-  </ul>
-
-  <script>
-    /* ================================================================
-       PUZZLE-CRITICAL — logic below is unchanged from the original.
-       The injected strings, especially the 1984 dates in 'properties',
-       are the answer. Do not edit them.
-       ================================================================ */
-    const targetImg = document.getElementById('target-img');
-    const customMenu = document.getElementById('custom-menu');
-    const infoBox = document.getElementById('info-box');
-
-
-    targetImg.addEventListener('contextmenu', function(e) {
-      e.preventDefault();
-
-
-      customMenu.style.top = `${e.pageY}px`;
-      customMenu.style.left = `${e.pageX}px`;
-      customMenu.style.display = 'block';
-    });
-
-    document.addEventListener('click', function(e) {
-      if (e.target !== targetImg) {
-        customMenu.style.display = 'none';
-      }
-    });
-
-
-    function showInfo(action) {
-
-      customMenu.style.display = 'none';
-
-      infoBox.style.display = 'block';
-
-      if (action === 'properties') {
-        infoBox.innerHTML = `
-          <strong>File Properties:</strong><br><br>
-          Item Type: PNG File<br>
-          Name: patient_case_profile.png<br>
-          Dimensions: 1920x1080<br>
-          Horizontal Resolution: 96 dpi<br>
-          Vertical Resolution: 96 dpi<br>
-          Bit depth: 32<br>
-          Color Space: RGB<br>
-          Location Data: 12.9796° N, 77.5906° W<br><br>
-          <strong>Metadata:</strong><br>
-          Size: 44,86,886 bytes<br>
-          Size on disk: 44,89,216 bytes<br>
-          Attributes: [Read Only, Hidden]<br>
-          Date created: 06/07/1984<br>
-          Date modified: 13/11/1984<br>
-        `;
-      } else if (action === 'view') {
-        infoBox.innerHTML = `
-          <strong>Error:</strong><br>
-          Full resolution rendering is restricted by the current clearance level.
-        `;
-      } else if (action === 'save') {
-        infoBox.innerHTML = `
-          <strong>Action Blocked:</strong><br>
-          File downloads have been temporarily disabled by the system administrator to prevent data leaks.
-        `;
-      }
-    }
-  </script>
+            if (action === 'properties') {
+                infoBox.innerHTML = `
+                    <strong>File Properties:</strong><br><br>
+                    Item Type: PNG File<br>
+                    Name: patient_case_profile.png<br>
+                    Dimensions: 1920x1080<br>
+                    Horizontal Resolution: 96 dpi<br>
+                    Vertical Resolution: 96 dpi<br>
+                    Bit depth: 32<br>
+                    Color Space: RGB<br>
+                    Location Data: 12.9796° N, 77.5906° W<br><br>
+                    <strong>Metadata:</strong><br>
+                    Size: 44,86,886 bytes<br>
+                    Size on disk: 44,89,216 bytes<br>
+                    Attributes: [Read Only, Hidden]<br>
+                    Date created: 06/07/1984<br>
+                    Date modified: 13/11/1984<br>
+                `;
+            } else if (action === 'view') {
+                infoBox.innerHTML = `
+                    <strong>Error:</strong><br>
+                    Full resolution rendering is restricted by the current clearance level.
+                `;
+            } else if (action === 'save') {
+                infoBox.innerHTML = `
+                    <strong>Action Blocked:</strong><br>
+                    File downloads have been temporarily disabled by the system administrator to prevent data leaks.
+                `;
+            }
+        }
+    </script>
 </body>
 </html>

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EKG Pulse - Dark Web Rises</title>
+  <link rel="stylesheet" href="../dwr-theme.css" />
+  <style>
+    /* Challenge-specific layout styling */
+    .challenge-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+      margin-top: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .challenge-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .image-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .ekg-display {
+      max-width: 100%;
+      height: auto;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background-color: var(--background);
+    }
+  </style>
+</head>
+<body>
+  <main class="dwr-shell">
+    
+    <!-- Header Section -->
+    <header class="dwr-header">
+      <div class="dwr-eyebrow">// challenge_07 // forensics</div>
+      <h1>EKG <span class="dwr-accent">Pulse</span></h1>
+      <p>Analyze the intercepted signal telemetry to identify heart-rate rhythm anomalies and extract the embedded data stream.</p>
+    </header>
+
+    <!-- Content Grid -->
+    <div class="challenge-grid">
+      
+      <!-- Briefing Panel -->
+      <section class="dwr-panel dwr-panel--elevated">
+        <h2>Mission Briefing</h2>
+        <p class="dwr-muted">
+          Warning: Subject neural activity unstable. The machine’s memory buffer is trapped in a loop of high spikes and flat lines.        </p>
+        <div class="dwr-note dwr-note--warn" style="margin-top: 20px;">
+          <strong>OPERATIONAL NOTE:</strong> Extract the raw binary stream from the monitor’s refresh cycle to bypass the local security lock.
+        </div>
+      </section>
+
+      <!-- Visual Display Panel -->
+      <section class="dwr-panel dwr-panel--neon image-container">
+        <h3>Signal Waveform</h3>
+        <!-- PNG Image Displayed On Screen -->
+        <img src="ekg-pulse.png" alt="EKG Pulse Telemetry Waveform" class="ekg-display" />
+      </section>
+
+    </div>
+
+  </main>
+</body>
+</html>

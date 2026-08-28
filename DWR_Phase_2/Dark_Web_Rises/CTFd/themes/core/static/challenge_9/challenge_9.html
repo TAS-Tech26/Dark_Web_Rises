@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gate 8: The Tremor - Dark Web Rises</title>
+  
+  <!-- Google Fonts: Caveat for handwritten sticky note -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="../dwr-theme.css" />
+  <style>
+    /* Challenge-specific layout styling */
+    .challenge-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+      margin-top: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .challenge-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    /* Digital Sticky Note Graphic - Handwritten Variant */
+    .sticky-note {
+      background-color: #fef08a;
+      color: #1c1917;
+      padding: 28px 20px;
+      border-radius: 2px;
+      /* Multi-layered shadow & realistic paper curl */
+      box-shadow: 
+        3px 10px 18px rgba(0, 0, 0, 0.35), 
+        inset 0 -15px 30px rgba(0, 0, 0, 0.08);
+      transform: rotate(-2.5deg);
+      max-width: 320px;
+      margin: 20px auto;
+      border-bottom-right-radius: 35px 8px;
+      font-family: 'Caveat', 'Comic Sans MS', cursive, sans-serif;
+    }
+
+    .sticky-note-text {
+      font-family: 'Caveat', cursive, sans-serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      line-height: 1.2;
+      text-align: center;
+      transform: rotate(1deg);
+      color: #111827;
+    }
+
+    .sticky-note-code {
+      display: block;
+      margin-top: 14px;
+      font-size: 2.2rem;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      color: #b91c1c; /* Scrawled red ink look */
+      transform: rotate(-2deg) scale(1.05);
+      text-shadow: 0.5px 0.5px 0px rgba(0, 0, 0, 0.15);
+    }
+
+    .flag-format {
+      margin-top: 24px;
+      font-weight: 600;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <main class="dwr-shell">
+    
+    <!-- Header Section -->
+    <header class="dwr-header">
+      <div class="dwr-eyebrow">// gate_08 // crypto</div>
+      <h1>Gate 8: <span class="dwr-accent">The Tremor</span></h1>
+      <p>The system demands a manual override password to clear the security lockout.</p>
+    </header>
+
+    <!-- Content Grid -->
+    <div class="challenge-grid">
+      
+      <!-- Storyline & Briefing Panel -->
+      <section class="dwr-panel dwr-panel--elevated">
+        <h2>Mission Briefing</h2>
+        <p class="dwr-muted">
+          Attached to the terminal screen is a digital sticky note, frantically scribbled by Dr. Vance in her final moments.
+        </p>
+        <p class="dwr-muted">
+          <em>"They are watching me. I've lost my center. Everything has moved one step to the right. My fingers slip. Type what I meant, not what I wrote."</em>
+        </p>
+        
+        <div class="dwr-note dwr-note--warn flag-format">
+          Flag Format: <span class="dwr-accent">ctf{your_answer}</span>
+        </div>
+      </section>
+
+      <!-- Sticky Note UI Graphic Panel -->
+      <section class="dwr-panel dwr-panel--neon">
+        <h3>Terminal Artifact</h3>
+        
+        <div class="sticky-note">
+          <div class="sticky-note-text">
+            TYPE WHAT I MEANT, NOT WHAT I WROTE:
+            <span class="sticky-note-code">D S M O Y U</span>
+          </div>
+        </div>
+
+        <div style="margin-top: 24px;">
+        </div>
+      </section>
+
+    </div>
+
+  </main>
+</body>
+</html>

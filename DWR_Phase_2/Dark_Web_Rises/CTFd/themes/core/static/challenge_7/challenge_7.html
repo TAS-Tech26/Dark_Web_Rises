@@ -170,6 +170,12 @@
       cursor: pointer;
       padding: 0;
     }
+
+    .flag-format {
+      margin-top: 16px;
+      font-weight: 600;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body>
@@ -179,6 +185,19 @@
     <div class="dwr-header">
       <div class="dwr-eyebrow">// evidence lab</div>
       <h1>Shredded <span class="dwr-accent">Plate</span></h1>
+    </div>
+
+    <!-- Briefing Panel -->
+    <div class="dwr-panel dwr-panel--elevated" style="margin-bottom: 24px;">
+      <h2>Mission Briefing</h2>
+      <p class="dwr-muted">
+        <!-- TODO: Fill with actual briefing details later -->
+        [ Briefing details will be populated here. Insert operational parameters, challenge constraints, or additional intel for the player. ]
+      </p>
+
+      <div class="dwr-note dwr-note--warn flag-format">
+        Flag Format: <span class="dwr-accent">ctf{your_answer}</span>
+      </div>
     </div>
 
   </div>

@@ -62,10 +62,10 @@
 
     /* Initial Positions Inside the 1000px Box */
     #glass1 { top: 100px;    left: 100px;  mix-blend-mode: screen; }
-    #glass2 { top: 100px;    right: 100px; mix-blend-mode: screen; }
+    #glass2 { bottom: 100px; right: 100px; mix-blend-mode: screen; }
     #glass3 { top: 350px;    left: 300px;  mix-blend-mode: screen; }
     #glass4 { bottom: 100px; left: 100px;  mix-blend-mode: screen; }
-    #glass5 { bottom: 100px; right: 100px; mix-blend-mode: screen; }
+    #glass5 { top: 100px;    right: 100px; mix-blend-mode: screen; }
 
     /* Hover & Active Grab States */
     .glass-img:hover  { opacity: 0.6; transform: scale(1.02); }
@@ -88,6 +88,12 @@
       max-width: 78ch;
     }
 
+    .flag-format {
+      margin-top: 16px;
+      font-weight: 600;
+      word-break: break-all;
+    }
+
   </style>
 </head>
 <body>
@@ -103,9 +109,12 @@
       <div class="dwr-eyebrow">// briefing</div>
       <h2 class="dwr-magenta">Alignment Required</h2>
       <p>
-        The terminal requires alignment. Superimpose the ghost fragment onto the
-        homepage matrix to synthesize the true digits.
+        The terminal requires alignment. Superimpose the ghost fragments to synthesize the true digits.
       </p>
+
+      <div class="dwr-note dwr-note--warn flag-format">
+        Flag Format: <span class="dwr-accent">ctf{your_answer}</span>
+      </div>
     </div>
 
   </div>

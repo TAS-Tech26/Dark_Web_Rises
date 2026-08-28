@@ -31,6 +31,11 @@
          selector below is (0,2,1) so no page-level paragraph rule can
          override it. Do not weaken it back to `.secret-text` alone. */
       color: transparent;
+      margin: 0;
+      padding: 0;
+      line-height: 1;
+      height: 0;
+      overflow: visible;
     }
 
     .secret-text::selection {
@@ -56,6 +61,11 @@
       font-size: 15px;
     }
 
+    .flag-format {
+      margin-top: 24px;
+      font-weight: 600;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body>
@@ -69,6 +79,16 @@
     </div>
 
     <div class="case-body">
+
+      <!-- Briefing Section -->
+      <div class="dwr-panel dwr-panel--elevated" style="margin-bottom: 24px;">
+        <h2>Mission Briefing</h2>
+        <p class="dwr-muted">
+          <!-- TODO: Fill with actual briefing details later -->
+          [ Briefing details will be populated here. Insert operational parameters, challenge constraints, or additional intel for the player. ]
+        </p>
+      </div>
+
       <div class="dwr-panel dwr-panel--elevated">
         <div class="dwr-eyebrow">// statement of record</div>
 
@@ -80,8 +100,13 @@
           obsession first took root.
         </p>
 
-        <!-- invisible text -->
+        <div class="dwr-note dwr-note--warn flag-format">
+          Flag Format: <span class="dwr-accent">ctf{your_answer}</span>
+        </div>
+
+        <!-- invisible text collapses height so no extra visual padding is added -->
         <p class="secret-text">A N A H D I V A H D U O S</p>
+
       </div>
     </div>
 

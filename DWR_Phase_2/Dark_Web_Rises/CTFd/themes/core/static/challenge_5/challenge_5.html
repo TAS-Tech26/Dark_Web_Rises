@@ -58,6 +58,12 @@
       text-align: center;
       margin-bottom: 8px;
     }
+
+    .flag-format {
+      margin-top: 24px;
+      font-weight: 600;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body>
@@ -71,6 +77,16 @@
     </div>
 
     <div class="note-body">
+      
+      <!-- Briefing Section -->
+      <div class="dwr-panel dwr-panel--elevated" style="margin-bottom: 24px;">
+        <h2>Mission Briefing</h2>
+        <p class="dwr-muted">
+          <!-- TODO: Fill with actual briefing details later -->
+          [ Briefing details will be populated here. Insert operational parameters, challenge constraints, or additional intel for the player. ]
+        </p>
+      </div>
+
       <div class="dwr-panel dwr-panel--elevated">
         <div class="dwr-eyebrow">// observer instructions</div>
 
@@ -91,6 +107,11 @@
 
         <div class="coords-label">// last known coordinates</div>
         <div class="coords">12.9786306,77.5917667</div>
+
+        <div class="dwr-note dwr-note--warn flag-format">
+          Flag Format: <span class="dwr-accent">ctf{your_answer}</span>
+        </div>
+
       </div>
     </div>
 
