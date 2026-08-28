@@ -18,6 +18,7 @@ import argparse
 import csv
 import json
 import math
+import os
 import secrets
 import sys
 from pathlib import Path
@@ -57,14 +58,65 @@ def team_scores(game_state: dict, round_no) -> dict:
     return {int(team_id): float(score) for team_id, score in raw.items()}
 
 
+def qualify_target(team_count: int) -> int:
+    """How many teams to take, before ties are considered.
+
+    Two environment variables, checked in this order:
+
+        PHASE2_QUALIFY_TEAMS      an absolute number, e.g. 10
+        PHASE2_QUALIFY_FRACTION   a proportion, e.g. 0.5 (the default)
+
+    An absolute count wins when both are set, because "the top 10 teams go
+    through" is a decision someone has made and a fraction is a rule of
+    thumb. Both are clamped to 1..team_count: asking for 20 of 12 teams
+    qualifies everyone rather than raising, and asking for 0 still takes the
+    winner, since a phase 2 with nobody in it is never what was meant.
+    """
+    if team_count <= 0:
+        return 0
+
+    raw_count = os.getenv("PHASE2_QUALIFY_TEAMS", "").strip()
+    if raw_count:
+        try:
+            wanted = int(raw_count)
+        except ValueError:
+            raise SystemExit(
+                f"PHASE2_QUALIFY_TEAMS={raw_count!r} is not a whole number."
+            )
+        return max(1, min(wanted, team_count))
+
+    raw_fraction = os.getenv("PHASE2_QUALIFY_FRACTION", "0.5").strip()
+    try:
+        fraction = float(raw_fraction)
+    except ValueError:
+        raise SystemExit(
+            f"PHASE2_QUALIFY_FRACTION={raw_fraction!r} is not a number."
+        )
+    if not 0 < fraction <= 1:
+        raise SystemExit(
+            f"PHASE2_QUALIFY_FRACTION={fraction} must be greater than 0 and at most 1."
+        )
+    return max(1, min(team_count, math.ceil(team_count * fraction)))
+
+
 def qualifying_teams(scores: dict) -> tuple[list, float | None]:
-    """Top 50% of scored teams (ceil), including anyone tied at the cutoff."""
+    """The top slice of scored teams, including anyone tied at the cutoff.
+
+    Size comes from qualify_target(); the default is the top 50%, which is
+    what this did before the environment variables existed.
+
+    TIES ARE INCLUDED, so the list can be LONGER than the number asked for.
+    Three teams tied on the 10th score all go through when you asked for 10.
+    That is deliberate -- breaking a tie on team id would send one team home
+    on the basis of when they registered -- but it means the count is a
+    target, not a guarantee, and CTFd may get more accounts than you planned.
+    """
     if not scores:
         return [], None
 
     # highest score first; team_id ascending as a stable secondary key
     ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
-    cutoff_index = math.ceil(len(ranked) / 2)
+    cutoff_index = qualify_target(len(ranked))
     cutoff_score = ranked[cutoff_index - 1][1]
 
     qualified = [team_id for team_id, score in ranked if score >= cutoff_score]

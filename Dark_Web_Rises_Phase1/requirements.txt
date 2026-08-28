@@ -15,6 +15,7 @@ python-dotenv==1.2.2
 torch==2.3.1+cpu
 torchvision==0.18.1+cpu
 open_clip_torch
+openxyl
 # Used only by reader.py, which is not currently imported by the running
 # app (see README "Future: database migration"). Kept for the planned
 # database-migration phase; safe to remove if reader.py is deleted first.

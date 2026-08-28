@@ -14,30 +14,30 @@
     /* ================================================================
        PUZZLE-CRITICAL — DO NOT CHANGE
        ----------------------------------------------------------------
-       The board is 600x800 split 3 columns x 6 rows. The script computes
-       each piece's background-position from those exact numbers
-       (boardWidth/cols, boardHeight/rows) and matches them against the
-       CSS grid. Change the board size, the column count or the row count
-       here without changing the script and every piece renders the wrong
-       slice of the image.
+       The board takes its size FROM THE IMAGE, at runtime. The script
+       reads naturalWidth/naturalHeight once the image has loaded, fits
+       that to the viewport preserving aspect ratio, and writes the
+       result into --board-width / --board-height. Swapping the image
+       for one of any other shape needs no change here.
 
-       .modal-overlay must start display:none -- the script adds .active
-       to show it. A visible overlay gives away the secret message before
-       the puzzle is solved.
+       Nothing sets a fixed pixel size any more. The old values (1100x825)
+       happened to match raven.jpeg exactly, which hid the real bug below.
        ================================================================ */
-    :root {
-      --board-width: 600px;
-      --board-height: 800px;
-      --piece-width: 200px;     /* 600px / 3 cols */
-      --piece-height: 133.33px; /* 800px / 6 rows */
-    }
-
     #puzzle-board {
-      width: var(--board-width);
-      height: var(--board-height);
+      width: var(--board-width, 1100px);
+      height: var(--board-height, 825px);
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      grid-template-rows: repeat(6, 1fr);
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+
+      /* THE SQUASH FIX.
+         #puzzle-board is a flex item inside .board-wrap, and flex items
+         have flex-shrink: 1 by default. On any viewport narrower than the
+         board, width was compressed while height stayed put -- so the
+         picture was squashed horizontally AND every piece showed the wrong
+         crop, because background-size stayed at the uncompressed figure.
+         flex-shrink: 0 makes .board-wrap's overflow-x scroll instead. */
+      flex: 0 0 auto;
     }
 
     .slot {
@@ -73,7 +73,12 @@
 
     /* ---------------- chrome ---------------- */
 
-    .board-wrap { display: flex; justify-content: center; }
+    .board-wrap { 
+      display: flex; 
+      justify-content: center; 
+      overflow-x: auto;
+      padding: 10px;
+    }
 
     #puzzle-board {
       border: 2px solid color-mix(in oklab, var(--neon) 45%, var(--border));
@@ -130,9 +135,6 @@
       -webkit-backdrop-filter: blur(6px);
     }
 
-    /* The recovered note. Deliberately still paper-coloured -- it is a
-       physical artefact inside the fiction, and the contrast against the
-       terminal is the point. */
     .paper-note {
       position: relative;
       width: 90%;
@@ -180,7 +182,7 @@
 </head>
 <body>
 
-  <div class="dwr-shell" style="max-width:640px;">
+  <div class="dwr-shell" style="max-width:1100px;">
 
     <div class="dwr-header">
       <div class="dwr-eyebrow">// evidence lab</div>
@@ -191,7 +193,6 @@
     <div class="dwr-panel dwr-panel--elevated" style="margin-bottom: 24px;">
       <h2>Mission Briefing</h2>
       <p class="dwr-muted">
-        <!-- TODO: Fill with actual briefing details later -->
         [ Briefing details will be populated here. Insert operational parameters, challenge constraints, or additional intel for the player. ]
       </p>
 
@@ -212,35 +213,81 @@
   <div id="paper-modal" class="modal-overlay">
     <div class="paper-note">
       <button class="close-btn" id="close-modal">&times;</button>
-      <div class="paper-content">
-        <!-- REPLACE YOUR MESSAGE HERE -->
-        <h3 style="margin-top: 0; color: #8b5a2b; font-family: Georgia, serif;">A Secret Unlocked!</h3>
-        <p>The Raven Watched From The East</p>
-        <!-- --------------------------- -->
+      <div class="paper-content" id="paper-content-container">
+        <!-- Content dynamically injected upon verification -->
       </div>
     </div>
   </div>
 
   <script>
     /* ================================================================
-       PUZZLE-CRITICAL — logic below is unchanged from the original.
-       The 600x800 / 3x6 constants must match the CSS grid above.
+       PUZZLE LOGIC — 4 cols x 3 rows (1100x825px)
        ================================================================ */
-    const imageUrl = 'transylvania_jigsaw.png';
+    const imageUrl = 'raven.jpeg';
+    const secretMessage = "The Raven Watched From The East";
 
-    const rows = 6;
-    const cols = 3;
-    const totalPieces = rows * cols; // 18 pieces
+    const rows = 3;
+    const cols = 4;
+    const totalPieces = rows * cols; // 12 pieces
 
-    const boardWidth = 600;
-    const boardHeight = 800;
-    const pieceW = boardWidth / cols;  // 200px
-    const pieceH = boardHeight / rows; // 133.33px
+    /* Board size comes from the image, not the other way round.
+       Filled in by sizeBoardToImage() once the image has loaded. */
+    let boardWidth = 0;
+    let boardHeight = 0;
+    let pieceW = 0;
+    let pieceH = 0;
 
     const board = document.getElementById('puzzle-board');
     const triggerContainer = document.getElementById('trigger-container');
     const modal = document.getElementById('paper-modal');
     const closeModalBtn = document.getElementById('close-modal');
+    const paperContentContainer = document.getElementById('paper-content-container');
+
+    /* Fit the image's own proportions into the space available.
+       Returns whole pixels divisible by cols/rows: a fractional piece size
+       leaves hairline seams between pieces and, worse, makes the
+       background offsets drift by a pixel or two per column so a correctly
+       placed piece looks very slightly wrong. */
+    function sizeBoardToImage(natW, natH) {
+      const aspect = natW / natH;
+
+      // Never upscale past the source -- an enlarged JPEG just looks soft.
+      // 32px of slack keeps it clear of .board-wrap's padding and any
+      // scrollbar the wrapper puts up.
+      const availW = Math.min(natW, (board.parentElement.clientWidth || natW) - 32);
+      // Leave room for the header and the reveal button so the whole board
+      // is on screen at once; a puzzle you have to scroll to see is a
+      // puzzle you cannot solve.
+      const availH = Math.min(natH, window.innerHeight * 0.72);
+
+      let w = Math.max(cols, availW);
+      let h = w / aspect;
+      if (h > availH) {
+        h = availH;
+        w = h * aspect;
+      }
+
+      boardWidth  = Math.max(cols, Math.floor(w / cols) * cols);
+      boardHeight = Math.max(rows, Math.floor(h / rows) * rows);
+      pieceW = boardWidth / cols;
+      pieceH = boardHeight / rows;
+
+      board.style.setProperty('--board-width', boardWidth + 'px');
+      board.style.setProperty('--board-height', boardHeight + 'px');
+    }
+
+    /* Re-apply sizing to pieces already on the board. Restyle only: the
+       DOM order is untouched, so a half-solved puzzle survives a window
+       resize or a phone rotating. */
+    function repaintPieces() {
+      document.querySelectorAll('.piece').forEach(piece => {
+        const originalIndex = parseInt(piece.dataset.originalIndex, 10);
+        const col = originalIndex % cols;
+        const row = Math.floor(originalIndex / cols);
+        piece.style.backgroundSize = `${boardWidth}px ${boardHeight}px`;
+        piece.style.backgroundPosition = `-${col * pieceW}px -${row * pieceH}px`;
+      });
+    }
 
     // 1. Create linear original indices and shuffle them
     const originalIndices = Array.from({ length: totalPieces }, (_, i) => i);
@@ -250,7 +297,8 @@
       shuffledIndices.sort(() => Math.random() - 0.5);
     } while (shuffledIndices.every((val, index) => val === index));
 
-    // 2. Build 18 grid slots
+    // 2. Build 12 grid slots
+    function buildBoard() {
     for (let slotIdx = 0; slotIdx < totalPieces; slotIdx++) {
       const slot = document.createElement('div');
       slot.classList.add('slot');
@@ -265,6 +313,36 @@
 
       board.appendChild(slot);
     }
+    }
+
+    /* Measure first, then build. Reading naturalWidth before the image has
+       loaded returns 0, which would size every piece to nothing. */
+    const sourceImage = new Image();
+    sourceImage.onload = () => {
+      sizeBoardToImage(sourceImage.naturalWidth, sourceImage.naturalHeight);
+      buildBoard();
+    };
+    sourceImage.onerror = () => {
+      // Say so rather than presenting an empty grid the player cannot solve.
+      board.style.setProperty('--board-width', '100%');
+      board.style.setProperty('--board-height', 'auto');
+      board.innerHTML =
+        '<p style="padding:40px;text-align:center;font-family:var(--font-mono);">' +
+        'Could not load ' + imageUrl + '. Tell an organiser.</p>';
+    };
+    sourceImage.src = imageUrl;
+
+    /* Rotating a phone changes the space available. Recompute and restyle;
+       do not rebuild, or the player loses their progress. */
+    let resizeTimer = null;
+    window.addEventListener('resize', () => {
+      if (!sourceImage.naturalWidth) return;
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        sizeBoardToImage(sourceImage.naturalWidth, sourceImage.naturalHeight);
+        repaintPieces();
+      }, 150);
+    });
 
     function createPiece(originalIndex) {
       const piece = document.createElement('div');
@@ -305,9 +383,10 @@
       const sourceSlotIndex = e.dataTransfer.getData('text/plain');
       const targetSlotIndex = targetSlot.dataset.slotIndex;
 
-      if (sourceSlotIndex === targetSlotIndex) return;
+      if (!sourceSlotIndex || sourceSlotIndex === targetSlotIndex) return;
 
       const sourceSlot = document.querySelector(`.slot[data-slot-index="${sourceSlotIndex}"]`);
+      if (!sourceSlot) return;
 
       const sourcePiece = sourceSlot.firstElementChild;
       const targetPiece = targetSlot.firstElementChild;
@@ -323,31 +402,39 @@
       let isSolved = true;
 
       slots.forEach(slot => {
-        const slotIdx = slot.dataset.slotIndex;
-        const pieceIdx = slot.firstElementChild.dataset.originalIndex;
+        const slotIdx = parseInt(slot.dataset.slotIndex, 10);
+        const pieceIdx = parseInt(slot.firstElementChild.dataset.originalIndex, 10);
         if (slotIdx !== pieceIdx) {
           isSolved = false;
         }
       });
 
-      if (isSolved && !document.getElementById('reveal-btn')) {
-        // Create glowing area when complete
-        const glowBtn = document.createElement('button');
-        glowBtn.id = 'reveal-btn';
-        glowBtn.classList.add('glowing-btn');
-        glowBtn.textContent = 'Open Secret Message';
-        glowBtn.addEventListener('click', () => {
-          modal.classList.add('active');
-        });
+      if (isSolved) {
+        // Automatically reveal modal & inject flag content
+        paperContentContainer.innerHTML = `
+          <h3 style="margin-top: 0; color: #8b5a2b; font-family: Georgia, serif;">A Secret Unlocked!</h3>
+          <p>${secretMessage}</p>
+        `;
+        
+        if (!document.getElementById('reveal-btn')) {
+          const glowBtn = document.createElement('button');
+          glowBtn.id = 'reveal-btn';
+          glowBtn.classList.add('glowing-btn');
+          glowBtn.textContent = 'Open Secret Message';
+          glowBtn.addEventListener('click', () => {
+            modal.classList.add('active');
+          });
+          triggerContainer.appendChild(glowBtn);
+        }
 
-        triggerContainer.appendChild(glowBtn);
-      } else if (!isSolved && document.getElementById('reveal-btn')) {
-        // Remove if user moves a piece after completion
+        modal.classList.add('active');
+      } else {
         triggerContainer.innerHTML = '';
+        paperContentContainer.innerHTML = '';
+        modal.classList.remove('active');
       }
     }
 
-    // Modal close controls
     closeModalBtn.addEventListener('click', () => {
       modal.classList.remove('active');
     });

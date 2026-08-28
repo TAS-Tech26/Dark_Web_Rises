@@ -6,7 +6,57 @@
   <title>EKG Pulse - Dark Web Rises</title>
   <link rel="stylesheet" href="../dwr-theme.css" />
   <style>
-    /* Challenge-specific layout styling */
+    /* ================================================================
+       PUZZLE-CRITICAL — DO NOT CHANGE
+       ----------------------------------------------------------------
+       The waveform is rendered from WAVEFORM_SEGMENTS in the script at
+       the bottom, joined with no separator. Those four strings ARE the
+       puzzle: each is one 4-bit chunk, a spike (/\) reads as 1 and a
+       flat (_) as 0, and the four decoded digits are the answer.
+
+       Do not hand-edit the stream into the HTML. The source PDF did
+       exactly that and its printed stream carried one flat segment more
+       than its own solution table, which decodes to 17 bits instead of
+       16 -- unsolvable as printed. Rendering from the segments means the
+       thing on screen and the thing that decodes cannot drift apart.
+
+       The monospace font and pre-wrap whitespace are load-bearing:
+       proportional glyphs make _ and /\ different widths, so the chunk
+       boundaries stop being countable by eye.
+       ================================================================ */
+    .ekg-monitor {
+      font-family: var(--font-mono);
+      background: var(--background);
+      border: 1px solid color-mix(in oklab, var(--neon) 45%, var(--border));
+      border-radius: var(--radius);
+      padding: 28px 20px;
+      text-align: center;
+      box-shadow: inset 0 0 60px color-mix(in oklab, var(--neon) 8%, transparent);
+    }
+
+    .ekg-trace {
+      display: block;
+      margin: 18px 0;
+      color: var(--neon);
+      font-family: var(--font-mono);
+      font-weight: 700;
+      white-space: pre-wrap;      /* wraps on a phone, keeps every glyph */
+      word-break: break-all;
+      line-height: 1.9;
+      letter-spacing: 0.08em;
+      font-size: clamp(1.1rem, 4.2vw, 1.9rem);
+      text-shadow: 0 0 12px color-mix(in oklab, var(--neon) 55%, transparent);
+    }
+    /* =============== END PUZZLE-CRITICAL =========================== */
+
+    .ekg-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.3em;
+      color: var(--muted-foreground);
+    }
+
     .challenge-grid {
       display: grid;
       grid-template-columns: 1fr;
@@ -14,61 +64,158 @@
       margin-top: 24px;
     }
 
-    @media (min-width: 768px) {
-      .challenge-grid {
-        grid-template-columns: 1fr 1fr;
-      }
+    @media (min-width: 900px) {
+      .challenge-grid { grid-template-columns: 1fr 1fr; }
     }
 
-    .image-container {
+    .bcd-wrap { margin-top: 24px; }
+
+    /* Two columns of the reference table side by side, as in the brief,
+       so all eleven rows are visible without scrolling on a laptop. */
+    .bcd-columns {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0 28px;
+    }
+    @media (min-width: 620px) {
+      .bcd-columns { grid-template-columns: 1fr 1fr; }
+    }
+
+    .bcd-columns table { width: 100%; }
+    .bcd-columns code {
+      font-family: var(--font-mono);
+      color: var(--neon);
+      background: color-mix(in oklab, var(--neon) 10%, transparent);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    .legend {
       display: flex;
-      flex-direction: column;
-      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px 28px;
       justify-content: center;
-      gap: 16px;
+      margin-top: 4px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--muted-foreground);
     }
-
-    .ekg-display {
-      max-width: 100%;
-      height: auto;
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      background-color: var(--background);
-    }
+    .legend b { color: var(--neon); font-size: 1.15em; }
   </style>
 </head>
 <body>
   <main class="dwr-shell">
-    
-    <!-- Header Section -->
+
     <header class="dwr-header">
-      <div class="dwr-eyebrow">// challenge_07 // forensics</div>
+      <div class="dwr-eyebrow">// challenge_08 // forensics</div>
       <h1>EKG <span class="dwr-accent">Pulse</span></h1>
-      <p>Analyze the intercepted signal telemetry to identify heart-rate rhythm anomalies and extract the embedded data stream.</p>
+      <p>Security subsystem v4.0.2 &middot; target code: <span class="dwr-accent">[LOCKED]</span></p>
     </header>
 
-    <!-- Content Grid -->
     <div class="challenge-grid">
-      
-      <!-- Briefing Panel -->
+
       <section class="dwr-panel dwr-panel--elevated">
         <h2>Mission Briefing</h2>
         <p class="dwr-muted">
-          Warning: Subject neural activity unstable. The machine’s memory buffer is trapped in a loop of high spikes and flat lines.        </p>
+          &gt; SYSTEM ALERT: Subject neural activity unstable.<br />
+          &gt; The machine&rsquo;s memory buffer is trapped in a continuous loop of
+          high spikes and flat lines.<br />
+          &gt; Extract the raw binary stream from the monitor&rsquo;s refresh cycle
+          to bypass the local security lock.
+        </p>
+
         <div class="dwr-note dwr-note--warn" style="margin-top: 20px;">
-          <strong>OPERATIONAL NOTE:</strong> Extract the raw binary stream from the monitor’s refresh cycle to bypass the local security lock.
+          <strong>ON-SCREEN DIAGNOSTIC WAVEFORM:</strong> a continuous bio-signal
+          refresh stream representing four sequential 4-bit binary chunks.
+        </div>
+
+        <div class="dwr-note" style="margin-top: 16px;">
+          Flag Format: <span class="dwr-accent">ctf{your_answer}</span>
         </div>
       </section>
 
-      <!-- Visual Display Panel -->
-      <section class="dwr-panel dwr-panel--neon image-container">
-        <h3>Signal Waveform</h3>
-        <!-- PNG Image Displayed On Screen -->
-        <img src="ekg-pulse.png" alt="EKG Pulse Telemetry Waveform" class="ekg-display" />
+      <section class="dwr-panel dwr-panel--neon">
+        <div class="ekg-monitor">
+          <div class="ekg-label">[ live ekg pulse stream &middot; ch-1 ]</div>
+          <code class="ekg-trace" id="ekg-trace" aria-label="EKG waveform"></code>
+          <div class="ekg-label">(continuous refresh buffer)</div>
+          <div class="legend">
+            <span><b>/\</b> spike</span>
+            <span><b>_</b> flat</span>
+          </div>
+        </div>
       </section>
 
     </div>
 
+    <section class="dwr-panel bcd-wrap">
+      <h2>4-Bit Binary Reference (0 &ndash; 10)</h2>
+      <p class="dwr-muted">Standard BCD conversion table.</p>
+      <div class="bcd-columns">
+        <table class="dwr-table">
+          <thead><tr><th>Decimal</th><th>4-Bit Binary</th></tr></thead>
+          <tbody id="bcd-left"></tbody>
+        </table>
+        <table class="dwr-table">
+          <thead><tr><th>Decimal</th><th>4-Bit Binary</th></tr></thead>
+          <tbody id="bcd-right"></tbody>
+        </table>
+      </div>
+    </section>
+
   </main>
+
+  <script>
+    /* ================================================================
+       PUZZLE-CRITICAL — the waveform itself
+       ----------------------------------------------------------------
+       Four segments, one per digit of the code, each exactly four
+       symbols. Joined with no separator so the player has to work out
+       the 4-bit chunking themselves -- which is the puzzle.
+
+       A spike (/\) is 1, a flat (_) is 0.
+
+       Each string below must contain exactly four symbols. The check
+       underneath enforces that and shouts in the console if it ever
+       stops being true, because a segment of the wrong length changes
+       the answer silently and the page would still look perfectly fine.
+
+       The decoded value is NOT in this file, deliberately: anything
+       here is one View Source away from the player.
+       ================================================================ */
+    const WAVEFORM_SEGMENTS = [
+      "_/\\_/\\",
+      "__/\\_",
+      "/\\___",
+      "___/\\"
+    ];
+
+    // Count symbols, not characters: a spike is two characters, one symbol.
+    function symbolCount(segment) {
+      return segment.replace(/\/\\/g, "1").replace(/_/g, "0").length;
+    }
+
+    WAVEFORM_SEGMENTS.forEach((seg, i) => {
+      const n = symbolCount(seg);
+      if (n !== 4) {
+        console.error(
+          `challenge_8: segment ${i + 1} (${seg}) has ${n} symbols, expected 4. ` +
+          `The waveform no longer decodes to the intended code.`
+        );
+      }
+    });
+
+    document.getElementById("ekg-trace").textContent = WAVEFORM_SEGMENTS.join("");
+
+    /* The reference table, split into two columns of 0-5 and 6-10. */
+    const left = document.getElementById("bcd-left");
+    const right = document.getElementById("bcd-right");
+    for (let n = 0; n <= 10; n++) {
+      const row = document.createElement("tr");
+      row.innerHTML =
+        `<td>${n}</td><td><code>${n.toString(2).padStart(4, "0")}</code></td>`;
+      (n <= 5 ? left : right).appendChild(row);
+    }
+  </script>
 </body>
 </html>

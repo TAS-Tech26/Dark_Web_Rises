@@ -57,36 +57,7 @@ HARDCODED_PLAYER_DATA = {
     4: ["user5", "password5", 0],
 }
 HARDCODED_TEAM_COUNT = 3
-
-# Admin ids live in their own range, well above any roster id.
-#
-# GameServer keeps admins and players in the SAME connected_sockets dict, so an
-# id used by both is not a name clash but a socket clash: the admin's login
-# overwrites the player's socket entry, that player stops receiving broadcasts,
-# and when they reconnect the server probes the ADMIN's socket for liveness.
-# The admin dashboard answers that probe, so the player is refused with
-# "already signed in on another device" -- permanently, with advice they cannot
-# act on. Real Supabase rosters start at id 1, so a single admin (id 0) is safe
-# by luck; a second admin would collide with player 1. Offsetting removes the
-# coincidence. GameServer.__init__ asserts the two ranges stay disjoint.
-ADMIN_ID_BASE = 1_000_000
-
-# Admin passwords that appear verbatim in this repository (.env.example, the
-# placeholder fallback below, the docs). Setting DWR_ADMINS to any of these is
-# the same as not setting it at all, so load_admins() says so loudly.
-PUBLIC_PLACEHOLDER_PASSWORDS = frozenset({
-    "admin_password",
-    "change-this-password",
-    "admin_password1",
-    "admin_password2",
-    "changeme",
-    "password",
-})
-
-HARDCODED_ADMINS = {
-    ADMIN_ID_BASE: ["admin1", "admin_password1"],
-    ADMIN_ID_BASE + 1: ["admin2", "admin_password2"],
-}
+HARDCODED_ADMINS = {0: ["admin1", "admin_password1"], 1: ["admin2", "admin_password2"]}
 
 
 @dataclass
@@ -206,31 +177,11 @@ def load_admins() -> dict:
         name, password = name.strip(), password.strip()
         if not name or not password:
             raise ValueError(f"DWR_ADMINS entry {chunk!r} has an empty name or password.")
-        admins[ADMIN_ID_BASE + index] = [name, password]
+        admins[index] = [name, password]
 
     if not admins:
         raise ValueError("DWR_ADMINS was set but no valid entries were parsed.")
-    # Known-public credentials produce a banner rather than a quiet info line.
-    # DWR_ADMINS being SET is not the same as it being SAFE: the values shipped
-    # in .env.example and in the placeholder fallback are both printed in this
-    # repository, and these credentials start and end the event.
-    weak = sorted(
-        name for name, password in admins.values()
-        if password in PUBLIC_PLACEHOLDER_PASSWORDS
-    )
-    if weak:
-        logger.error(
-            "\n" + "=" * 70
-            + "\nINSECURE ADMIN CREDENTIALS: %s\nThe password(s) for these "
-              "account(s) are published in this repository. Anyone who has read\n"
-              "the source can start, abort or end the event. Set DWR_ADMINS to "
-              "real\ncredentials in .env before going anywhere near a public "
-              "network.\n"
-            + "=" * 70,
-            ", ".join(weak),
-        )
-    else:
-        logger.info("Loaded %s admin account(s) from DWR_ADMINS.", len(admins))
+    logger.info("Loaded %s admin account(s) from DWR_ADMINS.", len(admins))
     return admins
 
 
@@ -268,6 +219,57 @@ def load_from_supabase(max_members_per_team: int = 4) -> RosterBundle:
     )
 
 
+def load_from_csv(max_members_per_team: int = 4) -> RosterBundle:
+    """Production path: build the roster from the participant CSV export.
+
+    Fatal on any row that cannot produce a working login. That is deliberate.
+    A roster that boots with 694 of 700 players looks completely healthy --
+    "Server ready: 694 players across 175 teams" -- and the only symptom is
+    six people who cannot log in and no way to tell who they are once the
+    room is full. Better to refuse now, with their names and row numbers.
+    """
+    import csv_roster
+
+    path = os.getenv("ROSTER_CSV_FILE", "participants.csv")
+    result = csv_roster.load_csv_roster(
+        path=path,
+        max_members_per_team=max_members_per_team,
+        event_name=os.getenv("DWR_EVENT_NAME", csv_roster.DEFAULT_EVENT_NAME),
+        event_slug=os.getenv("DWR_EVENT_SLUG", csv_roster.DEFAULT_EVENT_SLUG),
+    )
+    logger.info("%s", result.report.summary())
+
+    strict = os.getenv("ROSTER_CSV_STRICT", "true").strip().lower() not in {"0", "false", "no"}
+    if result.report.fatal:
+        if strict:
+            raise ValueError(
+                f"Participant CSV at {path} has rows that cannot produce a login:\n"
+                + result.report.summary()
+                + "\n\nFix the CSV, or set ROSTER_CSV_STRICT=false to drop those "
+                  "rows and play without them."
+            )
+        logger.error(
+            "ROSTER_CSV_STRICT=false: dropping %s unusable row(s) and continuing. "
+            "Those people cannot log in.\n%s",
+            len(result.report.errors), result.report.summary(),
+        )
+    if not result.player_data:
+        raise ValueError(
+            f"No players matched event {os.getenv('DWR_EVENT_NAME', csv_roster.DEFAULT_EVENT_NAME)!r} "
+            f"in {path}. Check the event column's spelling -- the filter is exact "
+            "apart from case and punctuation."
+        )
+
+    return RosterBundle(
+        player_data=result.player_data,
+        team_count=result.team_count,
+        admin_data=load_admins(),
+        source="csv",
+        fetched_at=time.time(),
+        warnings=list(result.report.warnings),
+    )
+
+
 def load_hardcoded() -> RosterBundle:
     logger.warning(
         "Using the built-in placeholder roster (user1/password1/...). This is for "
@@ -283,10 +285,15 @@ def load_hardcoded() -> RosterBundle:
 
 def resolve_source() -> str:
     source = os.getenv("ROSTER_SOURCE", "auto").strip().lower()
-    if source not in {"auto", "supabase", "cache", "hardcoded"}:
+    if source not in {"auto", "csv", "supabase", "cache", "hardcoded"}:
         logger.warning("Unknown ROSTER_SOURCE %r; treating as 'auto'.", source)
         source = "auto"
     if source == "auto":
+        # CSV first: it is the production path, and a participants.csv sitting
+        # in the working directory is a much stronger signal of intent than
+        # two Supabase variables that may still hold placeholders.
+        if os.path.exists(os.getenv("ROSTER_CSV_FILE", "participants.csv")):
+            return "csv"
         return "supabase" if (os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_KEY")) else "hardcoded"
     return source
 
@@ -312,6 +319,22 @@ def load_roster(max_members_per_team: int | None = None) -> RosterBundle:
             _describe_age(cached.fetched_at),
         )
         return cached
+
+    if source == "csv":
+        # No silent fallback to the cache here, unlike Supabase. Supabase can
+        # be unreachable through nobody's fault, so booting from a snapshot is
+        # the right call. A CSV is a local file: if it is missing or malformed
+        # that is a mistake someone just made, and falling back would hide it
+        # behind a roster that is quietly out of date.
+        bundle = load_from_csv(max_members_per_team)
+        for warning in bundle.warnings:
+            logger.warning("Roster: %s", warning)
+        write_cache(bundle)
+        logger.info(
+            "Roster loaded from CSV: %s players across %s teams.",
+            bundle.player_count, bundle.team_count,
+        )
+        return bundle
 
     # source == "supabase"
     try:

@@ -30,10 +30,11 @@
       justify-content: center;
       align-items: flex-start;
       gap: 28px;
+      flex-wrap: wrap;
     }
 
-    .ctf-container { flex: 1; max-width: 620px; }
-    .text-content  { flex: 1; max-width: 380px; }
+    .ctf-container { flex: 1 1 460px; max-width: 620px; }
+    .text-content  { flex: 1 1 300px; max-width: 380px; }
 
     .video-box {
       width: 100%;
@@ -69,6 +70,48 @@
     }
 
     .flag-format code { color: var(--neon); }
+
+    .morse-wrap { margin-top: 28px; }
+
+    /* Four columns on a desktop, collapsing down to one on a phone.
+       36 entries in a single column is a scroll nobody reads. */
+    .morse-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px 22px;
+      margin-top: 14px;
+    }
+    @media (min-width: 620px) { .morse-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (min-width: 900px) { .morse-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+
+    .morse-cell {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 5px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: color-mix(in oklab, var(--surface) 70%, transparent);
+    }
+
+    .morse-cell b {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--foreground);
+    }
+
+    /* Monospace and generous letter-spacing so a dash reads as clearly
+       longer than a dot -- which is the whole distinction the player is
+       trying to make against the spectrogram. */
+    .morse-cell span {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      color: var(--neon);
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
@@ -88,14 +131,18 @@
         <div class="dwr-panel">
           <div class="dwr-eyebrow">// playback</div>
 
-          <!-- Main Video -->
+          <!-- Main Video. Must match the default <option> below, which is
+               speed "1" -> mainSources["1"]. -->
           <video id="main-video" class="video-box" controls>
-            <source src="cashmoney.mp4" type="video/mp4">
+            <source src="main_regular_1x.mp4" type="video/mp4">
           </video>
 
-          <!-- Spectrogram Video (Hidden by default) -->
+          <!-- Spectrogram Video (hidden until the player asks for it).
+               Its initial source must be specSources["1"], for the same
+               reason: the two selectors have to agree before the player
+               touches anything. -->
           <video id="spec-video" class="video-box" style="display: none;" muted>
-            <source src="spectrogram_1x.mp4" type="video/mp4">
+            <source src="reverse_1x.mp4" type="video/mp4">
           </video>
 
           <div class="controls">
@@ -117,15 +164,14 @@
           <div class="dwr-eyebrow">// briefing</div>
           <h2 class="dwr-magenta" style="font-size:1.25rem;">Listen Backwards</h2>
           <p>
-            A good clinician always listens closely to their patients, but secrets
-            require you to reverse the arrow of time. Once the sound flows backward, do
-            not trust your ears, trust your eyes. Open the terminal's frequency
-            visualizer to look at the heat map of the audio track.
+            A good clinician always listens closely to their patients, but some messages are not meant to be understood as they first appear. 
+            When the sound is examined beyond what the ears can hear, patterns begin to emerge. 
           </p>
           <p>
-            The vertical bars of light hide a secret command written in Morse Code. But
-            beware: when time flips, the message mirrors. Trace the code from right to
-            left to break the first lock.
+            Open the terminal’s frequency visualizer and study the heat map of the audio track. 
+            The vertical bars of light conceal a secret command written in Morse Code. The dots and dashes are only the beginning  
+            pay close attention to the order in which the message presents itself. 
+            Trace the pattern carefully to break the first lock
           </p>
           <div class="flag-format">
             Flag format: <code>CTF{your_decoded_string}</code>
@@ -135,36 +181,81 @@
 
     </div>
 
+    <div class="dwr-panel morse-wrap">
+      <div class="dwr-eyebrow">// reference</div>
+      <h2 style="font-size:1.15rem;">International Morse Code</h2>
+      <p class="dwr-muted" style="font-size:14px;">
+        A short mark is a <span class="dwr-accent">dot</span>; a long mark is a
+        <span class="dwr-accent">dash</span>. On the visualiser, read a narrow bar
+        as a dot and a wide one as a dash, and treat the gaps between groups as
+        letter boundaries.
+      </p>
+      <div class="morse-grid" id="morse-grid"></div>
+    </div>
+
   </div>
 
   <script>
     /* ================================================================
        PUZZLE-CRITICAL — source maps and the two-video sync.
-       Taken from the updated `dwr_full` branch, with one correction
-       noted below.
        ================================================================ */
     const mainVideo = document.getElementById('main-video');
     const specVideo = document.getElementById('spec-video');
     const toggleBtn = document.getElementById('toggle-spec');
 
+    /* Four renders of the SAME recording, one per speed and direction.
+       These replaced four unrelated clips (nkg / garama / cashmoney /
+       uumuu), where changing "speed" swapped to a different video
+       altogether -- so the control did not do what it said, and the
+       spectrogram it synced against belonged to a different piece of
+       audio each time. */
     const mainSources = {
-        "-1.5": "uumuu.mp4",
-        "-1": "cashmoney.mp4",
-        "1": "nkg.mp4",
-        "1.5": "garama.mp4"
+        "-1.5": "main_reverse_1point5x.mp4",
+        "-1":   "main_reverse_1x.mp4",
+        "1":    "main_regular_1x.mp4",
+        "1.5":  "main_regular_1point5x.mp4"
     };
 
+    /* THE SWAP IS DELIBERATE — DO NOT "FIX" IT.
+       Forward playback shows reverse_*.mp4; reverse playback shows
+       spectrogram_*.mp4. The message is only meant to be legible once
+       the player has reversed the tape, which is exactly what the
+       briefing tells them to do. Straightening this mapping out so the
+       names line up would reveal the Morse at Normal 1x and remove the
+       puzzle.
+
+       If you change one of these filenames, play the challenge through
+       afterwards: a 404 here renders an empty black spectrogram, which
+       looks like "there is nothing to find" rather than like an error.
+       That has happened once already on this challenge. */
     const specSources = {
-        // CORRECTED. The dwr_full branch spelled this entry "reverse_"
-        // while the file committed beside it is spelled "reversed_", so the
-        // request 404'd and "Reverse 1.5x" rendered an empty spectrogram --
-        // the exact setting the briefing sends players to. Keep the spelling
-        // below in step with the actual filename on disk.
-        "-1.5": "spectrogram_reversed_1point5x.mp4",
-        "-1": "spectrogram_reversed.mp4",
-        "1": "spectrogram_1x.mp4",
-        "1.5": "spectrogram_1point5x.mp4"
+        "-1.5": "spectrogram_1point5x.mp4",
+        "-1":   "spectrogram_1x.mp4",
+        "1":    "reverse_1x.mp4",
+        "1.5":  "reverse_1point5x.mp4"
     };
+
+    /* International Morse (ITU-R M.1677-1). Letters then digits, in the
+       order a player scanning for a match would expect. Built in script
+       rather than typed as 36 rows of HTML so a transcription slip is
+       not possible. */
+    const MORSE = {
+      A: ".-",    B: "-...",  C: "-.-.",  D: "-..",   E: ".",     F: "..-.",
+      G: "--.",   H: "....",  I: "..",    J: ".---",  K: "-.-",   L: ".-..",
+      M: "--",    N: "-.",    O: "---",   P: ".--.",  Q: "--.-",  R: ".-.",
+      S: "...",   T: "-",     U: "..-",   V: "...-",  W: ".--",   X: "-..-",
+      Y: "-.--",  Z: "--..",
+      0: "-----", 1: ".----", 2: "..---", 3: "...--", 4: "....-",
+      5: ".....", 6: "-....", 7: "--...", 8: "---..", 9: "----."
+    };
+
+    const grid = document.getElementById("morse-grid");
+    for (const [ch, code] of Object.entries(MORSE)) {
+      const cell = document.createElement("div");
+      cell.className = "morse-cell";
+      cell.innerHTML = `<b>${ch}</b><span>${code}</span>`;
+      grid.appendChild(cell);
+    }
 
     function toggleSpectrogram() {
       if (specVideo.style.display === 'none') {
@@ -192,6 +283,12 @@
       const speed = document.getElementById('speed-select').value;
       mainVideo.src = mainSources[speed];
       specVideo.src = specSources[speed];
+      /* Keep the spectrogram visible across a speed change. Without this
+         it stays on screen but holding the PREVIOUS clip until the player
+         toggles it off and on again. */
+      if (specVideo.style.display !== 'none') {
+        specVideo.load();
+      }
       mainVideo.play();
     }
   </script>

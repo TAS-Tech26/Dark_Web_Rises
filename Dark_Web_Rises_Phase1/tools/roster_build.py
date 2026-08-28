@@ -1,6 +1,7 @@
 """Build, refresh and validate the roster cache -- outside the running app.
 
     python tools/roster_build.py check                      # is the cache right?
+    python tools/roster_build.py from-csv                   # build from the CSV
     python tools/roster_build.py refresh                    # pull from Supabase
     python tools/roster_build.py synth --teams 175          # generate a test roster
 
@@ -212,6 +213,46 @@ def cmd_refresh(args):
     return 0
 
 
+def cmd_from_csv(args):
+    """Build the cache from the participant CSV. The production path.
+
+    Uses the app's own loader, so a roster this accepts is one the app will
+    accept. A separate implementation here could disagree with the running
+    code in exactly the situation where that matters most.
+    """
+    os.environ["ROSTER_SOURCE"] = "csv"
+    if args.csv:
+        os.environ["ROSTER_CSV_FILE"] = args.csv
+    if args.cache:
+        os.environ["ROSTER_CACHE_FILE"] = args.cache
+    if args.event:
+        os.environ["DWR_EVENT_NAME"] = args.event
+    if args.lenient:
+        os.environ["ROSTER_CSV_STRICT"] = "false"
+
+    path = os.environ.get("ROSTER_CSV_FILE", "participants.csv")
+    try:
+        bundle = roster_module.load_from_csv(
+            max_members_per_team=int(os.getenv("MAX_MEMBERS_PER_TEAM", "4"))
+        )
+    except Exception as exc:
+        raise SystemExit(f"Could not build the roster from {path}:\n\n{exc}")
+
+    for warning in bundle.warnings:
+        print(f"warning: {warning}")
+
+    out = args.cache or roster_module.cache_path()
+    players = [
+        {"id": pid, "username": entry[0], "password": entry[1], "team_id": entry[2]}
+        for pid, entry in bundle.player_data.items()
+    ]
+    _write(out, players, bundle.team_count, f"CSV {path}")
+    print("\nNow verify it:")
+    print(f"  python tools/roster_build.py check --expect-teams {bundle.team_count} "
+          f"--expect-players {len(players)}")
+    return 0
+
+
 def cmd_synth(args):
     """A synthetic roster, for load tests and rehearsals.
 
@@ -255,6 +296,18 @@ def main():
     r = sub.add_parser("refresh", help="pull the roster from Supabase and cache it")
     r.add_argument("--cache", help="where to write (default: ROSTER_CACHE_FILE)")
     r.set_defaults(func=cmd_refresh)
+
+    f = sub.add_parser("from-csv",
+                       help="build the roster from the participant CSV (production)")
+    f.add_argument("--csv", help="participant CSV (default: ROSTER_CSV_FILE, "
+                                 "else participants.csv)")
+    f.add_argument("--cache", help="where to write (default: ROSTER_CACHE_FILE)")
+    f.add_argument("--event", help="event name to filter on "
+                                   "(default: DWR_EVENT_NAME, else 'Dark Web Rises')")
+    f.add_argument("--lenient", action="store_true",
+                   help="drop unusable rows instead of refusing. Those people "
+                        "cannot log in -- only use this knowing that.")
+    f.set_defaults(func=cmd_from_csv)
 
     s = sub.add_parser("synth", help="generate a synthetic roster for rehearsals")
     s.add_argument("--teams", type=int, default=175)
