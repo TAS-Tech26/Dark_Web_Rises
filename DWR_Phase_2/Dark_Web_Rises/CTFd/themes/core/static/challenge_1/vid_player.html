@@ -75,22 +75,22 @@
     <div class="ctf-container">
       <!-- Main Video -->
       <video id="main-video" class="video-box" controls>
-        <source src="cashmoney.mp4" type="video/mp4">
+        <source src="main_regular_1x.mp4" type="video/mp4">
       </video>
 
       <!-- Spectrogram Video (Hidden by default) -->
       <video id="spec-video" class="video-box" style="display: none;" muted>
-        <source src="cashmoney.mp4" type="video/mp4">
+        <source src="reverse_1x.mp4" type="video/mp4">
       </video>
 
       <div class="controls">
         <button id="toggle-spec" onclick="toggleSpectrogram()">View Spectrogram</button>
         
         <select id="speed-select" onchange="changeSpeed()">
+          <option value="1" selected>Forward 1x</option>
+          <option value="1.5">Forward 1.5x</option>
           <option value="-1.5">Reverse 1.5x</option>
           <option value="-1">Reverse 1x</option>
-          <option value="1" selected>Normal 1x</option>
-          <option value="1.5">Forward 1.5x</option>
         </select>
       </div>
     </div>
@@ -118,17 +118,18 @@
     const toggleBtn = document.getElementById('toggle-spec');
 
     const mainSources = {
-        "-1.5": "uumuu.mp4",
-        "-1": "cashmoney.mp4",
-        "1": "nkg.mp4",
-        "1.5": "garama.mp4"
+        "-1.5": "main_reverse_1point5x.mp4",
+        "-1": "main_reverse_1x.mp4",
+        "1": "main_regular_1x.mp4",
+        "1.5": "main_regular_1point5x.mp4"
     };
 
+    //reverse and regular are swapped as message is only supposed to be revealed once video is
     const specSources = {
-        "-1.5": "spectrogram_reverse_1point5x.mp4",
-        "-1": "spectrogram_reversed.mp4",
-        "1": "spectrogram_1x.mp4",
-        "1.5": "spectrogram_1point5x.mp4"
+        "-1.5": "spectrogram_1point5x.mp4",
+        "-1": "spectrogram_1x.mp4",
+        "1": "reverse_1x.mp4",
+        "1.5": "reverse_1point5x.mp4"
     };
 
     function toggleSpectrogram() {
